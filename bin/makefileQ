@@ -1,0 +1,5 @@
+# makefile for the single-processor linux platform. (Not a parallel version)
+
+include ../../bin/makefileQ.common
+
+# architecture-specific stuff goes here

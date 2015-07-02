@@ -1,0 +1,187 @@
+# master makefile. Includes elements common to all platforms. Platform-specific information should be put in the appropriate makefile.arch 
+
+###############################################################################
+L        =
+B        = $(BASEDIR)
+S        = $(BASEDIR)/src
+#J2       = $(BASEDIR)/src/jl2
+J        = $(BASEDIR)/src/jl
+#JL2      = -DPREFIX=jl_
+JL       = -DAMG_DUMP
+################################################################################
+#
+# core nekton files ...
+#
+#
+CORE = driveQ.o \
+subuser.o comm_mpi2.o quantum_debug.o\
+quantum_csr.o quantum_setup.o quantum_time.o
+
+# defaul and overwrite: order is important: system > programming model     
+MXM = mxm_std.o mxm_wrapper.o
+ifeq ($(BG) ,true)
+  MXM = mxm_std.o mxm_wrapper.o bg_aligned3.o bg_mxm44.o bg_mxm44_uneven.o bg_mxm3.o
+endif
+ifeq ($(OMP),true)
+  MXM = mxm_std_omp.o mxm_wrapper.o
+endif  
+ifeq ($(GPU) ,true)
+  MXM = mxm_gpu.o mxm_std_gpu.o mxm_std.o mxm_wrapper.o
+endif
+
+JO =gs.o\
+gs_acc.o\
+sarray_transfer.o\
+sarray_sort.o\
+gs_local.o\
+crystal.o\
+comm.o\
+tensor.o\
+fail.o\
+fcrystal.o\
+findpts.o \
+findpts_local.o \
+obbox.o \
+poly.o \
+lob_bnd.o\
+findpts_el_3.o\
+findpts_el_2.o\
+sparse_cholesky.o \
+xxt.o\
+fcrs.o\
+sort.o
+
+NOBJS = $(CORE) $(OS) $(JO) $(MXM) 
+
+L0 = -O0 $(OPT_OPTIONS)    
+L2 = -O2 $(OPT_OPTIONS)
+L3 = -O3 $(OPT_OPTIONS)
+L4 = -O3 $(OPT_OPTIONS) # 10/13/14 Azamat: temporarily switching from O4 to pass crayftn
+HMT   = #-DHPM -Dr8 -DDEBUG -DMPISRC -DSINGLE_DIR # -DBLAS
+
+###
+FL0   = $(L0) $(HMT) $(P)
+FL2   = $(L2) $(HMT) $(P)
+FL3   = $(L3) $(HMT) $(P) #-C -g 
+FL4   = $(L4) $(HMT) $(P)
+
+###
+DRL0    = $(FL0) # -Mconcur -Mreentrant
+DFL0    = $(FL0) # -Mconcur 
+DFL2    = $(FL2) # -Mconcur
+DFL3    = $(FL3) # -Mconcur 
+DFL4    = $(FL4) # -Mconcur -Minfo=loop -Mneginfo=loop
+
+RFL0    = $(FL0) #-Mreentrant
+RFL2    = $(FL2) #-Mreentrant
+RFL3    = $(FL3) #-Mreentrant
+RFL4    = $(FL4) #-Mreentrant
+
+DRFL0   = $(FL0) # -Mconcur -Mreentrant
+DRFL2   = $(FL3) # -Mconcur -Mreentrant
+DRFL3   = $(FL3) # -Mconcur -Mreentrant
+DRFL4   = $(FL4) # -Mconcur -Mreentrant
+
+cFL0   = $(L0) $(HMT)
+cFL2   = $(L2) $(HMT)
+cFL3   = $(L3) $(HMT)
+cFL4   = $(L4) $(HMT)
+
+###
+
+ifeq ($(GPU) ,true)
+lFLAGS = $(LAPACK) $(MPI_LIBS) $(EXTRALIBS) $(HPMFLAGS) $(MOABFLAGS) $(PROFILE_PRELIB) $(PROFILE_INCPATHS) -L$(CUDA_ROOT)/lib64 -lcudart -lcublas
+else
+lFLAGS = $(LAPACK) $(MPI_LIBS) $(EXTRALIBS) $(HPMFLAGS) $(MOABFLAGS) $(PROFILE_PRELIB) $(PROFILE_INCPATHS) 
+endif
+
+################################################################################
+
+all : nekcem  print
+
+nekcem:	 $(NOBJS)          
+	 $(LD) $(OPT_OPTIONS) -o nekcem $G $(NOBJS) $(lFLAGS) 
+# -Bstatic
+
+print: nekcem  
+	@if which size &> /dev/null ; then size nekcem ; fi
+	@echo "I am done" 
+
+clean:
+	rm *.o nekcem  
+
+
+################################################################################
+# fortran source files
+################################################################################
+#drive.o		:$S/drive.F;		$(F77) -c $(FL2) $<            
+driveQ.o	:$S/driveQ.F;		$(F77) -c $(FL2) $<            
+################################################################################
+commcube.o	:$S/commcube.F;		$(F77) -c $(FL2) $<
+comm_seq.o	:$S/comm_seq.F;		$(F77) -c $(FL2) $<
+mpi_dummy.o     :$S/mpi_dummy.F;	$(F77) -c $(FL2) $<
+byte_mpi.o      :$S/byte_mpi.F;         $(F77) -c $(FL2) $<
+subuser.o	:$S/subuser.F;		$(F77) -c $(FL2) $<
+
+################################################################################
+# NETLIB
+################################################################################
+blas.o          :$(NETLIB)/blas.f;      $(F77) -c $(FL4) $<
+lapack.o        :$(NETLIB)/lapack.f;    $(F77) -c $(FL4) $<
+arpack.o        :$(NETLIB)/arpack.f;    $(F77) -c $(FL4) $<
+
+
+################################################################################
+#reentrant modules
+################################################################################
+mxm.o		:$S/mxm.F;		$(F77) -c $(RFL4) $<
+mxm44.o		:$S/mxm44.F;		$(F77) -c $(RFL4) $<
+mxm44f2.o	:$S/mxm44f2.F;		$(F77) -c $(RFL4) $<
+
+################################################################################
+# MXM
+mxm_gpu.o       :$S/mxm_gpu.cu;               nvcc -arch=sm_20 -c -O3 $<    
+mxm_std_gpu.o   :$S/mxm_std_gpu.F;            $(F77) -c $(FL4) $<       
+mxm_std_omp.o   :$S/mxm_std_omp.F;            $(F77) -c $(FL4) $<       
+mxm_wrapper.o   :$S/mxm_wrapper.F;            $(F77) -c $(FL2) $<        
+mxm_std.o       :$S/mxm_std.F;                $(F77) -c $(FL4) $<       
+k10_mxm.o       :$S/k10_mxm.c;                $(CC)  -c $(cFL2) $<            
+bg_aligned3.o   :$S/bg_aligned3.s;            $(CC) -c $< 
+bg_mxm3.o       :$S/bg_mxm3.s;                $(CC) -c $< 
+bg_mxm44.o      :$S/bg_mxm44.s;               $(CC) -c $< 
+bg_mxm44_uneven.o :$S/bg_mxm44_uneven.s;      $(CC) -c $<
+#
+################################################################################
+quantum_setup.o :$S/quantum_setup.F;    $(F77) -c $(FL3) $<
+quantum_time.o  :$S/quantum_time.F;     $(F77) -c $(FL3) $<
+quantum_debug.o :$S/quantum_debug.F;    $(F77) -c $(FL3) $<
+quantum_csr.o   :$S/quantum_csr.F;      $(F77) -c $(FL3) $<
+comm_mpi2.o	:$S/comm_mpi2.F;	$(F77) -c $(FL2) $<
+xxt.o           :$(J)/xxt.c;             $(CC) -c $(cFL2) $(JL) $< 
+comm.o          :$(J)/comm.c;            $(CC) -c $(cFL2) $(JL) $< 
+gs.o            :$(J)/gs.c;              $(CC) -c $(cFL2) $(JL) $< 
+gs_acc.o        :$(J)/gs_acc.c;          $(CC) -c $(cFL2) $(JL) $< 
+fail.o            :$(J)/fail.c;            $(CC) -c $(cFL2) $(JL) $< 
+tensor.o          :$(J)/tensor.c;          $(CC) -c $(cFL2) $(JL) $< 
+sort.o            :$(J)/sort.c;            $(CC) -c $(cFL2) $(JL) $<
+sarray_sort.o     :$(J)/sarray_sort.c;     $(CC) -c $(cFL2) $(JL) $<
+crystal.o         :$(J)/crystal.c;         $(CC) -c $(cFL2) $(JL) $<
+sarray_transfer.o :$(J)/sarray_transfer.c; $(CC) -c $(cFL2) $(JL) $< 
+transfer.o        :$(J)/transfer.c;        $(CC) -c $(cFL2) $(JL) $< 
+fcrystal.o        :$(J)/fcrystal.c;        $(CC) -c $(cFL2) $(JL) $< 
+fcrystal3.o        :$(J)/fcrystal3.c;        $(CC) -c $(cFL2) $(JL) $< 
+gs_local.o        :$(J)/gs_local.c;        $(CC) -c $(cFL2) $(JL) $< 
+fcrs.o            :$(J)/fcrs.c;            $(CC) -c $(cFL2) $(JL) $< 
+sparse_cholesky.o :$(J)/sparse_cholesky.c; $(CC) -c $(cFL2) $(JL) $< 
+findpts.o         :$(J)/findpts.c;         $(CC) -c $(cFL2) $(JL) $< 
+findpts_local.o   :$(J)/findpts_local.c;   $(CC) -c $(cFL2) $(JL) $< 
+obbox.o           :$(J)/obbox.c;           $(CC) -c $(cFL2) $(JL) $< 
+poly.o            :$(J)/poly.c;            $(CC) -c $(cFL2) $(JL) $< 
+lob_bnd.o         :$(J)/lob_bnd.c;         $(CC) -c $(cFL2) $(JL) $< 
+findpts_el_3.o    :$(J)/findpts_el_3.c;    $(CC) -c $(cFL2) $(JL) $<
+findpts_el_2.o    :$(J)/findpts_el_2.c;    $(CC) -c $(cFL2) $(JL) $< 
+tuple_list.o       :$(J)/tuple_list.c;         $(CC) -c $(cFL2) $(JL) $<          
+findpt.o           :$(J)/findpt.c;             $(CC) -c $(cFL2) $(JL) $<       
+pfindpt.o          :$(J)/pfindpt.c;            $(CC) -c $(cFL2) $(JL) $<      
+amg.o              :$(J)/amg.c;                $(CC) -c $(cFL2) $(JL) $<      
+

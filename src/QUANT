@@ -1,0 +1,112 @@
+       common /QPRAMI/ iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
+     $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
+     $                , newHandleNumber,quantN,numberOfOps,nTimeDep
+     $                , numberOfLinOps,c_offset,max_time_dep
+     $                , lin_comb_nnz,nstate2,ltonq,numsp,debug
+     $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
+     $                , nstate_np,iiqstep,obsPrintSkip
+       integer         iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
+     $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
+     $                , newHandleNumber,quantN,numberOfOps,nTimeDep
+     $                , numberOfLinOps,c_offset,max_time_dep
+     $                , lin_comb_nnz,nstate2,ltonq,numsp,debug
+     $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
+     $                , nstate_np,iiqstep,obsPrintSkip
+
+c!!! Temporary: level = nzmax, lnumqd=lin_max_ops lnumsp=maxOps
+
+c!!! These are recreating the common blocks from nekCEM
+       common /QNEKCEMR/ time, dt, pi
+       real              time, dt, pi
+C
+C     Communication information
+C     NOTE: NID is stored in 'SIZE' for greater accessibility
+      COMMON /CUBE1/ NODE,PID,NP,NULLPID,NODE0
+      INTEGER        NODE,PID,NP,NULLPID,NODE0
+
+
+       common /QTIME2/  qctime1, qctime2, qctime3, qctime4
+     $               ,  qrtime1, qrtime2, qrtime3, qrtime4
+       real             qctime1, qctime2, qctime3, qctime4
+     $               ,  qrtime1, qrtime2, qrtime3, qrtime4
+
+       common /QPRAMR/ timemax, timeunit, printdt, timeOld
+     $               , pulse_omega_0, pulse_t_0,energy0_pls
+     $               , pulse_duration,Emax,Emin        !Change this!
+       real            timemax, timeunit, printdt, timeOld
+     $               , pulse_omega_0, pulse_t_0,energy0_pls
+     $               , pulse_duration,Emax,Emin
+
+       common /QPRAMIV/ iwork(5),ham_ia(maxN+1)
+     $               , ham_ja(maxN*maxN/lp)
+     $               , state(maxOp,maxN),initIndex(maxOp,2),oldN(maxOp)
+     $               , levels(maxOp),obs_handle(maxOp)
+     $               , lin_offset(maxOp/4)
+     $               , lin_l_index(2,maxN*maxN/lp,maxOp/4)
+     $               , lin_nl_index(2,maxN,maxN/lp,maxOp/4)
+     $               , lin_target(maxN,maxOp/4)
+     $               , lin_l_length(maxOp/4),lin_nl_col_length(maxOp/4)
+     $               , lin_nl_length(maxN,maxOp/4),lin_tiling_N(maxOp/4)
+     $               , op_csr_ia(maxN+1,maxOp),ham_i_ia(maxN+1)
+     $               , ham_i_ja(maxN*maxN/lp),ham_d_ja(maxN*maxN/lp)
+     $               , op_csr_ja(maxN*10,maxOp),ham_d_ia(maxN+1)
+     $               , j0_array(maxN*maxN/lp)
+     $               , obs_csr_ia(maxN*10+1,maxOp)
+     $               , obs_csr_ja(maxN*10,maxOp)
+       integer         iwork,ham_ia,ham_ja
+     $               , oldN,state
+     $               , levels,obs_handle,initIndex,lin_target
+     $               , lin_nl_index
+     $               , lin_l_length,lin_nl_col_length,lin_nl_length
+     $               , lin_offset,lin_l_index,lin_tiling_N,ham_i_ia
+     $               , op_csr_ia,op_csr_ja,ham_i_ja,ham_d_ja,ham_d_ia
+     $               , j0_array,obs_csr_ia,obs_csr_ja
+
+       common /QPRAMLO/ rwa,calc_concurrence
+       logical          rwa,calc_concurrence
+
+       common /QPRAMI8/ lin_disp(maxN,maxOp)
+       integer*8        lin_disp
+       common /QPRAMIE/ glo_num_q_concV(maxN*maxN/lp) 
+     $               , glo_num_q_Hv(maxN*maxN/lp)
+       integer*8       glo_num_q_Hv,glo_num_q_concV !FIXME 12-17-14 Matt Otten: integer*8 does not work on blues
+
+       common /QPRAMV/ work(maxN + 21*2*maxN*maxN/lp)
+     $               , ham_i(maxN*maxN/lp),ham_d(maxN*maxN/lp)
+     $               , ham_a(maxN*maxN/lp),omega_quant(maxE)
+     $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/lp,maxOp/4)
+     $               , lin_nl_a(maxN,maxN/lp,maxOp/4)
+     $               , op_csr_a(maxN*10,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
+     $               , tmprv(maxN*maxN/lp)
+     $               , tmpiv(maxN*maxN/lp)
+     $               , pop_time(maxTimeSteps,maxOp/3)
+     $               , obs_time(maxTimeSteps,maxOp/4)
+     $               , observable(maxOp),obs_csr_a(maxN*10,maxOp/4)
+       real            work,ham_i,ham_d,ham_a
+     $               , lin_nl_a,lin_l_a,lin_scalar,obs_scalar
+     $               , omega_quant, op_csr_a,tmprv,tmpiv,pop_time
+     $               , obs_time, observable,obs_csr_a
+
+       common /QPRAMC/ rho      (maxN,maxN/lp)
+     $               , drho     (maxN,maxN/lp)
+     $               , tmp_c1(maxN,maxN/lp)
+       complex        rho,drho,tmp_c1
+
+       common /QPRAMW/ rho_r       (maxN,maxN/lp)
+     $               , rho_i       (maxN,maxN/lp)
+     $               , k_rho_r     (maxN,maxN/lp)
+     $               , k_rho_i     (maxN,maxN/lp)
+     $               , resrho_r    (maxN,maxN/lp)
+     $               , resrho_i    (maxN,maxN/lp)
+     $               , tmp_r1      (maxN,maxN/lp)
+     $               , tmp_r2      (maxN,maxN/lp)
+     $               , tmp_i1      (maxN,maxN/lp)
+     $               , tmp_i2      (maxN,maxN/lp)
+     $               , lin_comb_op (maxN,maxN/lp)
+     $               , state_sums(maxN,maxN/lp)
+       real            rho_r,rho_i,k_rho_r,k_rho_i,resrho_r,resrho_i
+       real            tmp_r1,tmp_r2,tmp_i1,tmp_i2,operator,lin_comb_op
+       real            ham_dep,ham_indep,lin_one_op,state_sums
+
+
+
