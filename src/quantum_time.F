@@ -279,16 +279,18 @@ c---------------------------------------------------------------------
       complex  sig,en_t(nEh),obs_freq(maxOp,nEh),tmpc1,ci
 
       ci=(0.0,1.0)
-      if(nqstep.lt.maxTimeSteps) then
+      if(nqstep.gt.maxTimeSteps) then
          print*, 'ERROR!'
          print*, 'nqstep TOO LARGE FOR THIS maxTimeSteps!'
+         call exitt()
       endif
+
       if(nid.eq.0) then
 c     Write file headers 
-         write(12,*)'#Time,sp_mu,qd_mu(1),qd_mu(2),
-     $mu_tot,pulse,popSp'
+         write(12,*)'#Time,populations'
+         write(13,*)'#Time,observables'
          if(calc_concurrence.eqv..true.) then
-            write(13,*)'#Time,3:2,3:1,2:1'
+            write(14,*)'#Time,3:2,3:1,2:1'
          endif
       endif
 
@@ -321,12 +323,14 @@ c!$acc&     copyin(omega_s,gamma_s,s_mu)
 c!$acc&     copyin(pulse_omega_0,pulse_t_0,pulse_duration,energy0_pls)
 c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
 
-      do ii=1,nEh
-         en_t(ii) = (0.0,0.0)
-         do jj=1,numObservables
-            obs_freq(jj,ii) = (0.0,0.0)
+      if(ifPulse.eqv..true.) then
+         do ii=1,nEh
+            en_t(ii) = (0.0,0.0)
+            do jj=1,numObservables
+               obs_freq(jj,ii) = (0.0,0.0)
+            enddo
          enddo
-      enddo
+      endif
 
 c     Pulsed case
 c      do iqstep= 1,nqstep
@@ -334,7 +338,7 @@ c      do iqstep= 1,nqstep
        iiqstep = 1
        do while(time.lt.timemax)
 !         print *,nid,time
-         stime1= dclock()
+          stime1= dclock()
          do ii= 1,5
 !            call rk_quantum3_c(ii)
             stime7 = dclock()
@@ -356,7 +360,9 @@ c             dt=dt_large
 c         endif
          time= time+dt
          stime7= dclock()
-
+         if(useGates.eqv..true.) then
+            call quantum_apply_gates()
+         endif
          call cem_quantum3_observables(obs_freq,en_t)
          if(time.gt.timeOld) then
             call cem_quantum3_pop()
@@ -411,101 +417,111 @@ c$$$         endif
       if(nid.eq.0) then
          time = dt
          kk = 1
-         do ii=1,iqstep
+         if(ifPulse.eqv..true.) then
 
-            call usertimedep(pulseFactor)
+            do ii=1,iqstep
+            
+               call usertimedep(pulseFactor)
 c     Now, do the fourier transform to save the value
 !     Envelope*oscillations --- consider putting oscillations in user control?
-            if(rwa.eqv..true.) then
-               fullPulse = 2*pulseFactor*
-     $              cos(pulse_omega_0*(time-pulse_t_0))
-            else
-               fullPulse = pulseFactor
-            endif
-
-            do kk=1,nEh
-               en_t(kk) = en_t(kk)
-     $              +fullPulse*exp(ci*omega_quant(kk)*(time-pulse_t_0))
-
-               do jj=1,numObservables
-                  obs_freq(jj,kk) = obs_freq(jj,kk) +  
-     $                 (exp(ci*omega_quant(kk)*(time-pulse_t_0))*
-     $                 obs_time(ii,jj))
+               if(rwa.eqv..true.) then
+                  fullPulse = 2*pulseFactor*
+     $                 cos(pulse_omega_0*(time-pulse_t_0))
+               else
+                  fullPulse = pulseFactor
+               endif
+               
+               do kk=1,nEh
+                  en_t(kk) = en_t(kk)+fullPulse*
+     $                 exp(ci*omega_quant(kk)*(time-pulse_t_0))
+                  
+                  do jj=1,numObservables
+                     obs_freq(jj,kk) = obs_freq(jj,kk) +  
+     $                    (exp(ci*omega_quant(kk)*(time-pulse_t_0))*
+     $                    obs_time(ii,jj))
+                  enddo
+                  
                enddo
-
-            enddo
-!            write(13,12)time*timeunit
+!     write(13,12)time*timeunit
 !     $           ,(obs_time(ii,jj),jj=1,numObservables)
-
-            time = time + dt
-         enddo
+               
+               time = time + dt
+            enddo
+         endif
 
          kk = 1
          time = dt
          do while(time.lt.timemax)
-            write(13,12)time*timeunit
-     $           ,(obs_time(kk,jj),jj=1,numObservables)
-            
+            if(ifPulse.eqv..true.) then
+               call usertimedep(pulseFactor)
+c     Now, do the fourier transform to save the value
+!     Envelope*oscillations --- consider putting oscillations in user control?
+               if(rwa.eqv..true.) then
+                  fullPulse = 2*pulseFactor*
+     $                 cos(pulse_omega_0*(time-pulse_t_0))
+               else
+                  fullPulse = pulseFactor
+               endif
+               if(abs(pulseFactor).lt.1e-10) pulseFactor=0
+
+               write(13,12)time*timeunit,pulseFactor
+     $              ,(obs_time(kk,jj),jj=1,numObservables)
+            else
+               write(13,12)time*timeunit
+     $              ,(obs_time(kk,jj),jj=1,numObservables)
+            endif
             kk = kk + obsPrintSkip
             time = time + obsPrintSkip*dt
          enddo
 
          time = dt
          do ii=1,iiqstep
-
-            call usertimedep(pulseFactor)
-c     Now, do the fourier transform to save the value
-!     Envelope*oscillations --- consider putting oscillations in user control?
-            if(rwa.eqv..true.) then
-               fullPulse = 2*pulseFactor*
-     $              cos(pulse_omega_0*(time-pulse_t_0))
-            else
-               fullPulse = pulseFactor
-            endif
-            if(abs(pulseFactor).lt.1e-10) pulseFactor=0
-            write(12,12)time*timeunit,pulseFactor
+            !Print populations
+            write(12,12)time*timeunit
      $           ,(pop_time(ii,jj),jj=1,numberOfOps)
 
             time = time+printdt
          enddo
  12      format(1p20g20.8)
 c     Print out results
-      write(11,*)'#eV,sig_abs,sig_scatt,sig_tot'
+         if(ifPulse.eqv..true.) then
+            write(11,*)'#eV,sig_abs,sig_scatt,sig_tot'
 
 !     Update this stuff!
-      !I'm not sure how to do this is a really user friendly manner
-      !FIXME! Hardcoded
-      c_speed = 2.99792458d10 !cm/s
-      d_per_au = 1.0d0 / 3.93430307d-1
-      eesu_per_au = 5.14220652d17 / c_speed
-      eps_med     = 2.25
-      eV       = 27.21140                ! energy Eh  
-
-      do ii=1,nEh
-         rinc = 4.0*pi*(omega_quant(ii)/timeunit)/
-     $        (c_speed*eps_med**0.5)*
-     $        d_per_au*1.0d-18/eesu_per_au
-         sig = (0,0)
-         do jj=1,numObservables
-            sig = sig + obs_freq(jj,ii)
-         enddo
-         sig  = rinc*sig/en_t(ii)
-         rinc = 8.0d0*pi*(omega_quant(ii)/timeunit)**4/
-     $        (3.0d0*c_speed**4)*
-     $        d_per_au*1.0d-18/eesu_per_au
-         tmpc1 = (0,0)
-         do jj = 1,numObservables
-            tmpc1 = tmpc1 + obs_freq(jj,ii)
-         enddo
-         sigr = rinc * cabs(tmpc1/en_t(ii))**2
-         sigi  = imag(sig)
-!         write(11,13) omega_quant(ii),en_t(ii),
+!I'm not sure how to do this is a really user friendly manner
+!FIXME! Hardcoded
+            c_speed = 2.99792458d10 !cm/s
+            d_per_au = 1.0d0 / 3.93430307d-1
+            eesu_per_au = 5.14220652d17 / c_speed
+            eps_med     = 2.25
+            eV       = 27.21140 ! energy Eh  
+            
+            do ii=1,nEh
+               rinc = 4.0*pi*(omega_quant(ii)/timeunit)/
+     $              (c_speed*eps_med**0.5)*
+     $              d_per_au*1.0d-18/eesu_per_au
+               sig = (0,0)
+               do jj=1,numObservables
+                  sig = sig + obs_freq(jj,ii)
+               enddo
+               sig  = rinc*sig/en_t(ii)
+               rinc = 8.0d0*pi*(omega_quant(ii)/timeunit)**4/
+     $              (3.0d0*c_speed**4)*
+     $              d_per_au*1.0d-18/eesu_per_au
+               tmpc1 = (0,0)
+               do jj = 1,numObservables
+                  tmpc1 = tmpc1 + obs_freq(jj,ii)
+               enddo
+               sigr = rinc * cabs(tmpc1/en_t(ii))**2
+               sigi  = imag(sig)
+!     write(11,13) omega_quant(ii),en_t(ii),
 !     $        obs_freq(1,ii),obs_freq(2,ii)+
-!    $        obs_freq(3,ii)
-         write(11,13) eV*omega_quant(ii),sigi,sigr,sigr+sigi 
-      enddo
-      
- 13   format(1p5e20.10)
+!     $        obs_freq(3,ii)
+               write(11,13) eV*omega_quant(ii),sigi,sigr,sigr+sigi 
+            enddo
+            
+ 13         format(1p5e20.10)
+         endif
       close(12)
       close(11)
       endif
@@ -607,15 +623,16 @@ c!$omp parallel do collapse(1)
       enddo
 
       !Time dependent stuff will need to change!
-c$$$      alpha = 2. * log(2.0) / pulse_duration**2
-c$$$
-c$$$      pulseFactor_loc = energy0_pls/2.0e*xp(-alpha*(time-pulse_t_0)**2)
-      call usertimedep(pulseFactor_loc)
-!!      print*,'pulse',pulseFactor_loc
+      if(ifPulse.eqv..true.) then
+         call usertimedep(pulseFactor_loc)
+      endif
 !$acc parallel loop
 
       do ii=1,ham_nnz
-         ham_a(ii) = ham_i(ii) + pulseFactor_loc*ham_d(ii)
+         ham_a(ii) = ham_i(ii)
+         if(ifPulse.eqv..true.) then
+            ham_a(ii) = ham_a(ii) + pulseFactor_loc*ham_d(ii)
+         endif
          !Currently only supports a single time dependence
 c$$$         do jj=1,nTimeDep
 c$$$            ham_a(ii) = ham_a(ii) + pulseFactor_loc*ham_d(ii)
@@ -707,6 +724,99 @@ c!$omp end parallel do
       return
       end
 
+
+!******************************************************************
+!*
+!* quantum_apply_gates applies the user defined gate sequence in time
+!* 
+!* inputs: none, depends on setup rouints
+!*
+!* outputs: none, but does the U rho U^dagger operation
+!*
+!******************************************************************
+
+      subroutine quantum_apply_gates
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+#ifdef MPI
+      include 'mpif.h'
+#endif
+
+      integer nzmax,gate,ii,jj,kk,j0
+      real    dclock,ttmp
+      complex ci
+      
+      ci = (0,1)
+
+      nzmax = 10*maxN
+
+      if(time.gt.quantum_gate_times(current_gate).and.
+     $     (current_gate.le.number_of_gates)) then
+
+         do jj=1,nstate_np
+            do ii=1,nstate
+               rho(ii,jj) = rho_r(ii,jj) + ci*rho_i(ii,jj)
+            enddo
+         enddo
+!     Do Um*rho
+         gate = quantum_gate(current_gate)
+
+         call cem_quantum3_csr_mxm_complex(rho,tmp_c1,
+     $        quantum_gate_csr_a(1,gate),
+     $        quantum_gate_csr_ia(1,gate),
+     $        quantum_gate_csr_ja(1,gate))
+
+         do jj = 1,nstate_np
+            do ii = 1,nstate
+               j0 = (jj-1)*nstate+ii
+               tmprv(j0) = real(tmp_c1(ii,jj))
+               tmpiv(j0) = imag(tmp_c1(ii,jj))
+            enddo
+         enddo
+
+
+!     Do (Um*rho)^dagger
+         ttmp= dclock()
+         call gs_op_fields(gs_handle_q_H,tmprv,
+     $        nstate_p,1,1,1,0)
+         call gs_op_fields(gs_handle_q_H,tmpiv,nstate_p,1,1,1,0)
+
+         qctime1= qctime1+dclock()-ttmp     
+
+
+         do jj= 1,nstate/np
+            do kk = 1,nstate
+               if(jj+c_offset.ne.kk) then
+                  j0 = (jj-1)*nstate+kk
+!     We want b, so we take a+b-a
+!     We want -b, so we take a - (a+b)
+                  tmp_c1(kk,jj) = tmprv(j0) - real(tmp_c1(kk,jj))
+     $                 + ci*(imag(tmp_c1(kk,jj)) - tmpiv(j0))
+               endif
+            enddo
+         enddo        
+
+
+!     calculate Um*(Um*rho)^dag
+         call cem_quantum3_csr_mxm_complex(tmp_c1,rho,
+     $        quantum_gate_csr_a(1,gate),
+     $        quantum_gate_csr_ia(1,gate),
+     $        quantum_gate_csr_ja(1,gate))
+
+         do jj=1,nstate_np
+            do ii=1,nstate
+               rho_r(ii,jj) = real(rho(ii,jj))
+               rho_i(ii,jj) = imag(rho(ii,jj))
+            enddo
+         enddo
+
+!     Increment the current_gate
+         current_gate = current_gate + 1
+      endif
+      
+      end
+
 c-------------------------------------------------------------------
       subroutine cem_quantum3_pop()
 c-------------------------------------------------------------------
@@ -727,8 +837,11 @@ c-------------------------------------------------------------------
 !$acc parallel loop collapse(2)
       do jj=1,nstate_np
       do ii=1,nstate
-            tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
+         tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
+         if(ifPulse.eqv..true.) then
+            tmp_c1(ii,jj) = tmp_c1(ii,jj)*
      $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+         endif
       enddo
       enddo
 !$acc end parallel loop
