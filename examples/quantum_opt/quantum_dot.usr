@@ -28,6 +28,16 @@ c-----------------------------------------------------------------------
       integer qd1t_spt,qd1_sp,sp2_qd1t,sp2t_qd1
       integer qd1_a_qd1t,qd2_a_qd2t,sp_a_spt
       integer qd3,qd3t,qd3n,qd3_a_qd3t,qd3t_sp,qd3_spt
+      real hadamard(2,2)
+      
+      hadamard(1,1) = 1
+      hadamard(1,2) = 2
+      hadamard(2,1) = 3
+      hadamard(2,2) = 4
+
+
+      call quantum_tensor_product_um(hadamard,1,8)
+
 
       print*,'nid ini',nid
 

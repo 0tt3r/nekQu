@@ -4,6 +4,7 @@
       include 'SIZE'
       include 'QUANT'
 
+      number_of_gates = 0
       numObservables  = 0
       newHandleNumber = 1
       quantN          = 1
@@ -595,6 +596,117 @@ c$$$       enddo
       return
 
       end
+
+
+!********************************************************************
+!*
+!* tensor product of a 2x2 matrix, Um, for qubit m (out of n qubits)
+!*
+!* U = 1 cross 1 cross 1 ... cross Um cross 1 ... cross 1
+!*
+!* inputs: 
+!*    um = matrix representing gate acting on one qubit
+!*    m  = number of qubit
+!*    n  = total number of qubits
+!*
+!* Note: Works only on systems of qubits; other degrees of freedom
+!*       need to be traced out
+!*
+!********************************************************************
+
+      subroutine quantum_tensor_product_um(um,m,n)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'mpif.h'
+      
+      real um(2,2)
+      integer n
+      real dns(2**n,2**n)
+      integer m,ii,i_coo_a,jj,ndns,ierr
+
+      ndns = 2**n
+      number_of_gates = number_of_gates + 1
+      !First, construct as COO format then convert to CSR
+      
+      !Construct the subblock, representing
+      ! block = um cross 1 ... cross 1
+      ! This happens n-m times, where n is the total number of qubits
+      ! The size of 1 is defined by the levels of all operators
+
+
+      i_coo_a = 0
+      ! Construct all of the blocks
+      ! We want 2**(m-1) blocks
+      ! each block is just a copy of the subblock, offset by the 
+      ! subblocks size
+      ! I.E.
+      ! u = 1 2    becomes u = 1 2 0 0 
+      !     3 4                3 4 0 0
+      !                        0 0 1 2
+      !                        0 0 3 4
+      do jj=1,2**(m-1)
+         ! Construct the subblock
+         ! Each subblock consists of taking the normal matrix and 'expanding' it
+         ! by making each entry a small 'diagonal' like element.
+         ! I.E.
+         ! u = 1 2    becomes  u = 1 0 2 0
+         !     3 4                 0 1 0 2
+         !                         3 0 4 0
+         !                         0 3 0 4 
+         ! Additional kronecker products with 1 just continue to expand the matrix
+         ! in this way
+         do ii=1,2**(n-m)
+            ! um(1,1) part
+            i_coo_a = i_coo_a + 1
+            quantum_gate_coo_a(i_coo_a) = um(1,1)
+            quantum_gate_coo_ia(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+            quantum_gate_coo_ja(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+
+            ! um(2,2) part
+            i_coo_a = i_coo_a + 1
+            quantum_gate_coo_a(i_coo_a) = um(2,2)
+            quantum_gate_coo_ia(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
+            quantum_gate_coo_ja(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
+            print*,ii,2**(n-m)
+            ! um(1,2) part
+            i_coo_a = i_coo_a + 1
+            quantum_gate_coo_a(i_coo_a) = um(1,2)
+            quantum_gate_coo_ia(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+            quantum_gate_coo_ja(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
+
+            ! um(2,1) part
+            i_coo_a = i_coo_a + 1
+            quantum_gate_coo_a(i_coo_a) = um(2,1)
+            quantum_gate_coo_ia(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
+            quantum_gate_coo_ja(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+         enddo
+      enddo
+
+      ! Convert the COO matrix to CSR
+
+      !subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
+      call coocsr(2**(n),i_coo_a,quantum_gate_coo_a,quantum_gate_coo_ia,
+     $     quantum_gate_coo_ja,quantum_gate_csr_a(1,number_of_gates),
+     $     quantum_gate_csr_ja(1,number_of_gates),
+     $     quantum_gate_csr_ia(1,number_of_gates))
+
+      call csrdns(2**n,2**n,quantum_gate_csr_a(1,number_of_gates),
+     $     quantum_gate_csr_ja(1,number_of_gates),
+     $     quantum_gate_csr_ia(1,number_of_gates),dns,2**n,ierr)
+      
+      do ii=1,2**n
+         write(11,'(1000g25.15)') (dns(ii,jj), jj=1,2**n)
+      enddo
+
+      call exitt()
+      
+
+      end
+
+
+
+
 
 
 !     quantum_lin_gs_op has been deprecated as of r2040

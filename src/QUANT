@@ -4,14 +4,14 @@
      $                , numberOfLinOps,c_offset,max_time_dep
      $                , lin_comb_nnz,nstate2,ltonq,numsp,debug
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
-     $                , nstate_np,iiqstep,obsPrintSkip
+     $                , nstate_np,iiqstep,obsPrintSkip,number_of_gates
        integer         iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
      $                , newHandleNumber,quantN,numberOfOps,nTimeDep
      $                , numberOfLinOps,c_offset,max_time_dep
      $                , lin_comb_nnz,nstate2,ltonq,numsp,debug
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
-     $                , nstate_np,iiqstep,obsPrintSkip
+     $                , nstate_np,iiqstep,obsPrintSkip,number_of_gates
 
 c!!! Temporary: level = nzmax, lnumqd=lin_max_ops lnumsp=maxOps
 
@@ -53,6 +53,10 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , j0_array(maxN*maxN/lp)
      $               , obs_csr_ia(maxN*10+1,maxOp)
      $               , obs_csr_ja(maxN*10,maxOp)
+     $               , quantum_gate_coo_ia(2*maxN)
+     $               , quantum_gate_coo_ja(2*maxN)
+     $               , quantum_gate_csr_ia(2*maxN,maxOp)
+     $               , quantum_gate_csr_ja(2*maxN,maxOp)
        integer         iwork,ham_ia,ham_ja
      $               , oldN,state
      $               , levels,obs_handle,initIndex,lin_target
@@ -61,6 +65,8 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , lin_offset,lin_l_index,lin_tiling_N,ham_i_ia
      $               , op_csr_ia,op_csr_ja,ham_i_ja,ham_d_ja,ham_d_ia
      $               , j0_array,obs_csr_ia,obs_csr_ja
+     $               , quantum_gate_coo_ia,quantum_gate_coo_ja
+     $               , quantum_gate_csr_ia,quantum_gate_csr_ja
 
        common /QPRAMLO/ rwa,calc_concurrence
        logical          rwa,calc_concurrence
@@ -82,10 +88,15 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , pop_time(maxTimeSteps,maxOp/3)
      $               , obs_time(maxTimeSteps,maxOp/4)
      $               , observable(maxOp),obs_csr_a(maxN*10,maxOp/4)
+     $               , quantum_gate_coo_a(2*maxN)
+     $               , quantum_gate_csr_a(2*maxN,maxOp)
+
        real            work,ham_i,ham_d,ham_a
      $               , lin_nl_a,lin_l_a,lin_scalar,obs_scalar
      $               , omega_quant, op_csr_a,tmprv,tmpiv,pop_time
      $               , obs_time, observable,obs_csr_a
+     $               , quantum_gate_coo_a,quantum_gate_csr_a
+
 
        common /QPRAMC/ rho      (maxN,maxN/lp)
      $               , drho     (maxN,maxN/lp)
