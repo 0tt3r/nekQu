@@ -37,7 +37,7 @@ c
 c Notes:
 c This routine is NOT in place.  See coicsr
 c
-      double precision a(*),ao(*),x
+      complex a(*),ao(*),x
       integer ir(*),jc(*),jao(*),iao(*)
 
       do 1 k=1,nrow+1
@@ -435,12 +435,47 @@ c---------------------------------------------------------------------
       include 'QUANT'
 
 
-      !Maybe give these definite sizes?
+      !Maybe give these definite sizeps?
       integer ii,jj,kk,istart,iend,mat_ia(*),mat_ja(*)
       real    sum
       real    mat_a(*)
       real*8  rrho (maxN,maxN/lp)
       real*8  tmprr(maxN,maxN/lp)
+
+!$acc data present(ham_ia,ham_ja,ham_a,rrho,tmprr)
+!$acc parallel loop private(istart,iend)
+      do jj=1,nstate_np
+!$acc loop vector private(sum)
+      do ii=1,nstate
+         istart = mat_ia(ii)
+         iend   = mat_ia(ii+1)-1
+         sum = 0
+         do kk=istart,iend
+            sum = sum + mat_a(kk)*rrho(mat_ja(kk),jj)
+         enddo
+         tmprr(ii,jj) = sum
+      enddo
+      enddo
+!$acc end data
+
+      return
+      end
+
+c---------------------------------------------------------------------
+      subroutine cem_quantum3_csr_mxm_complex(rrho,tmprr,
+     $     mat_a,mat_ia,mat_ja)
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+
+      !Maybe give these definite sizeps?
+      integer ii,jj,kk,istart,iend,mat_ia(*),mat_ja(*)
+      real    sum
+      complex mat_a(*)
+      complex rrho (maxN,maxN/lp)
+      complex tmprr(maxN,maxN/lp)
 
 !$acc data present(ham_ia,ham_ja,ham_a,rrho,tmprr)
 !$acc parallel loop private(istart,iend)
@@ -651,6 +686,7 @@ c
             if (j .gt. ncol) then
                ierr = i
                print*,'ERROR IN CSRDNS'
+               print*,'j greater than ncol!'
                stop
                return
             end if

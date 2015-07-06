@@ -4,15 +4,29 @@
       include 'SIZE'
       include 'QUANT'
 
-      number_of_gates = 0
-      numObservables  = 0
-      newHandleNumber = 1
-      quantN          = 1
-      numberOfOps     = 0
-      nTimeDep        = 0
-      numberOfLinOps  = 0
-      num_nl_lin_ops  = 0
-      max_time_dep    = 2
+      integer ii,jj
+      current_gate     = 1
+      number_of_gates  = 0
+      generated_gates  = 0
+      numObservables   = 0
+      newHandleNumber  = 1
+      quantN           = 1
+      numberOfOps      = 0
+      nTimeDep         = 0
+      numberOfLinOps   = 0
+      num_nl_lin_ops   = 0
+      max_time_dep     = 2
+      ifPulse          = .false.
+      rwa              = .true.
+      calc_concurrence = .false.
+      pi               = 4.*ATAN(1.0)
+
+      !Zero out the gates_table
+      do ii=1,6
+         do jj = 1,maxOp
+            gates_table(ii,jj) = 0
+         enddo
+      enddo
 
       end
 
@@ -600,6 +614,159 @@ c$$$       enddo
       end
 
 
+
+!*******************************************************************
+!*
+!* Adds a gate to the quantum gate hamiltonian
+!*
+!* inputs:
+!*      qubit - identifies the qubit the gate should be applied to
+!*      totalQubits - total number of qubits in the system
+!*      gateIdentifier - integer between 1 and 6 identifying the basic
+!*                       gate to be applied
+!*                       1: Px = 0  1     2: Py = 0 -i 
+!*                               1  0             i  0
+!*                       3: Pz = 1  0    
+!*                               0 -1    
+!*                       4: Phase = 1 0    
+!*                                  0 i 
+!*                       5: pi/8 = 1     0
+!*                                 0 exp(i*pi/4)  
+!*                       6: hadamard = 1/sqrt(2) * 1  1
+!*                                                 1 -1
+!*      time - the time at which the gate should be applied
+!*
+!* outputs:
+!*      none, but stores generated gate in quantum_gate_csr_*,
+!*      the times to apply the gates in quantum_gate_times,
+!*      and the gates to apply in quantum_gate (a pointer into
+!*      the quantum_gate_csr* arrays, allowing us to reuse a 
+!*      previously generated gate).
+!*      
+!*******************************************************************
+      subroutine quantum_add_gate(qubit,totalQubits,gateIdentifier,
+     $     gatetime)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer qubit,totalQubits,gateIdentifier,gate,nzmax
+      real    gatetime,dns(2**totalQubits,2**totalQubits)
+      integer n,ierr,ii,jj,m
+      complex ci,um(2,2)
+      n = totalQubits
+      nzmax   = maxN*10
+      ci = (0,1)
+
+
+      !Input checking
+      if ((qubit.lt.1).or.(qubit.gt.totalQubits)) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'qubit number doesn\'t make sense!'
+            print*,'Please use a number greater than 1 and less than the
+     $total number of qubits'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if(totalQubits.gt.numberOfOps) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'Having more qubits than the number of operators
+     $doesn\'t make any sense!'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if(number_of_gates.gt.0) then
+         if(gatetime.lt.quantum_gate_times(number_of_gates)) then
+            if(nid.eq.0) then
+               print*,'ERROR!'
+               print*,'Please enter gates in order of the time that 
+     $that they will be applied!'
+            endif
+            call exitt()
+         endif
+      endif
+
+      !Construct one of the six basic 2x2 gates
+      ! FIXME: Consider storing these somewhere?
+      if(gateIdentifier.eq.1) then
+         um(1,1) = 0
+         um(1,2) = 1
+         um(2,1) = 1
+         um(2,2) = 0
+      else if(gateIdentifier.eq.2) then
+         um(1,1) = 0
+         um(1,2) = -ci
+         um(2,1) = ci
+         um(2,2) = 0
+      else if(gateIdentifier.eq.3) then
+         um(1,1) = 1
+         um(1,2) = 0
+         um(2,1) = 0
+         um(2,2) = -1
+      else if(gateIdentifier.eq.4) then
+         um(1,1) = 1
+         um(1,2) = 0
+         um(2,1) = 0
+         um(2,2) = ci
+      else if(gateIdentifier.eq.5) then
+         um(1,1) = 1
+         um(1,2) = 0
+         um(2,1) = 0
+         um(2,2) = exp(ci*pi/4)
+      else if(gateIdentifier.eq.6) then
+         um(1,1) = 2**(-1/2)
+         um(1,2) = 2**(-1/2)
+         um(2,1) = 2**(-1/2)
+         um(2,2) = -2**(-1/2)
+      else
+         !Input checking
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'gateIdentifier out of range'
+            print*,'Please use a number between 1-6'
+         endif
+         call exitt()
+      endif
+
+      number_of_gates = number_of_gates + 1
+      m = totalQubits - qubit + 1
+!      qubit = totalQubits - qubit + 1
+!      qubit = totalQubits - qubit + 1
+
+      !Save the time to apply the gate
+      quantum_gate_times(number_of_gates) = gatetime
+
+      !Only regenerate the gate if we haven't seen it yet
+      if(gates_table(gateIdentifier,qubit).eq.0) then
+         !Construct the full gate
+         call quantum_tensor_product_um(um,m,totalQubits)
+         quantum_gate(number_of_gates) = generated_gates
+      else
+         quantum_gate(number_of_gates) = 
+     $        gates_table(gateIdentifier,m)
+      endif
+
+c$$$      do ii=1,5*nstate
+c$$$         tmprv(ii) = real(quantum_gate_csr_a(ii,gate))
+c$$$      enddo
+c$$$
+c$$$      !Debug statements
+c$$$      call csrdns(2**n,2**n,tmprv,
+c$$$     $     quantum_gate_csr_ja(1,gate),
+c$$$     $     quantum_gate_csr_ia(1,gate),dns,2**n,ierr)
+c$$$      
+c$$$      do ii=1,2**n
+c$$$         write(6,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
+c$$$      enddo
+
+      end
+
 !********************************************************************
 !*
 !* tensor product of a 2x2 matrix, Um, for qubit m (out of n qubits)
@@ -611,6 +778,8 @@ c$$$       enddo
 !*    m  = number of qubit
 !*    n  = total number of qubits
 !*
+!* outputs:
+!*    none, but stores the generated gate into quantum_gate_csr
 !* Note: Works only on systems of qubits; other degrees of freedom
 !*       need to be traced out
 !*
@@ -620,15 +789,13 @@ c$$$       enddo
       implicit none
       include 'SIZE'
       include 'QUANT'
-      include 'mpif.h'
       
-      real um(2,2)
+      complex um(2,2)
       integer n
-      real dns(2**n,2**n)
-      integer m,ii,i_coo_a,jj,ndns,ierr
+      integer m,ii,i_coo_a,jj
 
-      ndns = 2**n
-      number_of_gates = number_of_gates + 1
+      generated_gates = generated_gates + 1
+
       !First, construct as COO format then convert to CSR
       
       !Construct the subblock, representing
@@ -660,28 +827,37 @@ c$$$       enddo
          ! in this way
          do ii=1,2**(n-m)
             ! um(1,1) part
-            i_coo_a = i_coo_a + 1
-            quantum_gate_coo_a(i_coo_a) = um(1,1)
-            quantum_gate_coo_ia(i_coo_a) = ii+(jj-1)*2**(n-m+1)
-            quantum_gate_coo_ja(i_coo_a) = ii+(jj-1)*2**(n-m+1)
-
-            ! um(2,2) part
-            i_coo_a = i_coo_a + 1
-            quantum_gate_coo_a(i_coo_a) = um(2,2)
-            quantum_gate_coo_ia(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
-            quantum_gate_coo_ja(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
-            print*,ii,2**(n-m)
-            ! um(1,2) part
-            i_coo_a = i_coo_a + 1
-            quantum_gate_coo_a(i_coo_a) = um(1,2)
-            quantum_gate_coo_ia(i_coo_a) = ii+(jj-1)*2**(n-m+1)
-            quantum_gate_coo_ja(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
-
-            ! um(2,1) part
-            i_coo_a = i_coo_a + 1
-            quantum_gate_coo_a(i_coo_a) = um(2,1)
-            quantum_gate_coo_ia(i_coo_a) = ii+2**(n-m)+(jj-1)*2**(n-m+1)
-            quantum_gate_coo_ja(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+            if((real(um(1,1)).ne.0).or.imag(um(1,1)).ne.0) then
+               i_coo_a = i_coo_a + 1
+               quantum_gate_coo_a(i_coo_a) = um(1,1)
+               quantum_gate_coo_ia(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+               quantum_gate_coo_ja(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+            endif
+! um(2,2) part
+            if((real(um(2,2)).ne.0).or.imag(um(2,2)).ne.0) then
+               i_coo_a = i_coo_a + 1
+               quantum_gate_coo_a(i_coo_a) = um(2,2)
+               quantum_gate_coo_ia(i_coo_a) = ii+2**(n-m)+
+     $              (jj-1)*2**(n-m+1)
+               quantum_gate_coo_ja(i_coo_a) = ii+2**(n-m)+
+     $              (jj-1)*2**(n-m+1)
+            endif
+! um(1,2) part
+            if((real(um(1,2)).ne.0).or.imag(um(1,2)).ne.0) then
+               i_coo_a = i_coo_a + 1
+               quantum_gate_coo_a(i_coo_a) = um(1,2)
+               quantum_gate_coo_ia(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+               quantum_gate_coo_ja(i_coo_a) = ii+2**(n-m)+
+     $              (jj-1)*2**(n-m+1)
+            endif
+! um(2,1) 
+            if((real(um(2,1)).ne.0).or.imag(um(2,1)).ne.0) then
+               i_coo_a = i_coo_a + 1
+               quantum_gate_coo_a(i_coo_a) = um(2,1)
+               quantum_gate_coo_ia(i_coo_a) = ii+2**(n-m)+
+     $              (jj-1)*2**(n-m+1)
+               quantum_gate_coo_ja(i_coo_a) = ii+(jj-1)*2**(n-m+1)
+            endif
          enddo
       enddo
 
@@ -689,26 +865,11 @@ c$$$       enddo
 
       !subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
       call coocsr(2**(n),i_coo_a,quantum_gate_coo_a,quantum_gate_coo_ia,
-     $     quantum_gate_coo_ja,quantum_gate_csr_a(1,number_of_gates),
-     $     quantum_gate_csr_ja(1,number_of_gates),
-     $     quantum_gate_csr_ia(1,number_of_gates))
-
-      call csrdns(2**n,2**n,quantum_gate_csr_a(1,number_of_gates),
-     $     quantum_gate_csr_ja(1,number_of_gates),
-     $     quantum_gate_csr_ia(1,number_of_gates),dns,2**n,ierr)
-      
-      do ii=1,2**n
-         write(11,'(1000g25.15)') (dns(ii,jj), jj=1,2**n)
-      enddo
-
-      call exitt()
-      
+     $     quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
+     $     quantum_gate_csr_ja(1,generated_gates),
+     $     quantum_gate_csr_ia(1,generated_gates))
 
       end
-
-
-
-
 
 
 !     quantum_lin_gs_op has been deprecated as of r2040

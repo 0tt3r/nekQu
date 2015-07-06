@@ -36,9 +36,6 @@ c-----------------------------------------------------------------------
       hadamard(2,2) = 4
 
 
-      call quantum_tensor_product_um(hadamard,1,8)
-
-
       print*,'nid ini',nid
 
       !Read the simple input
@@ -89,7 +86,6 @@ c-----------------------------------------------------------------------
 !      fluence     = 1.0e-9*1d7  ! nJ/cm**2
       pi          = 4.*ATAN(1.0)
       pulse_duration = 2e-14/timeunit
-      rwa         = .true.
       timemax     = 10e-13/timeunit
       nqstep      = 10000
       pulse_t_0     = 1e-13/timeunit
@@ -104,6 +100,10 @@ c-----------------------------------------------------------------------
       
 
       call quantum_setup_initialize()
+
+      ifPulse          = .true.
+      rwa              = .true.
+      calc_concurrence = .true.
       
       call quantum_create_op(2,qd1,qd1t,qd1n)
       call quantum_create_op(2,qd2,qd2t,qd2n)

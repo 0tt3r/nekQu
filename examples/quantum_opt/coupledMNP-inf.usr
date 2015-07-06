@@ -50,8 +50,6 @@ c-----------------------------------------------------------------------
       fluence          = 50.0e-9*1d7  ! nJ/cm**2
       pi               = 4.*ATAN(1.0)
       pulse_duration   = 0.1e-14/timeunit
-      rwa              = .true.
-      calc_concurrence = .false.
       pulse_t_0        = 1e-13/timeunit
       timemax          = 2.5e-13/timeunit
 
@@ -62,6 +60,11 @@ c-----------------------------------------------------------------------
       energy0_pls     = energy0_pls / eesu_per_au
 
       call quantum_setup_initialize()
+
+      ifPulse = .true.
+      rwa              = .true.
+      calc_concurrence = .false.
+
 
       call quantum_create_op(4,sa1,sa1t,sa1n)
       call quantum_create_op(2,sa2,sa2t,sa2n)
