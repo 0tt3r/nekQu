@@ -4,7 +4,7 @@
       include 'SIZE'
       include 'QUANT'
 
-      integer ii,jj
+      integer ii,jj,kk
       current_gate     = 1
       number_of_gates  = 0
       generated_gates  = 0
@@ -28,10 +28,13 @@
          enddo
       enddo
 
-      !zero out the cnot_table
+      !zero out the cnot_table and crk_table
       do ii=1,maxOp
          do jj=1,maxOp
             cnot_table(ii,jj) = 0
+            do kk=1,maxOp
+               crk_table(ii,jj,kk)  = 0
+            enddo
          enddo
       enddo
 
@@ -674,8 +677,9 @@ c$$$       enddo
 
       integer control,target,totalQubits,nzmax
       real    gatetime,dns(2**totalQubits,2**totalQubits)
-      integer n,ierr,ii,jj,m,kk,binary_rep
+      integer n,ierr,ii,jj,m,kk,binary_rep,ll
       integer control_ii,control_jj,target_ii,target_jj
+      logical otherSame
       nzmax   = maxN*10
       n       = totalQubits
 
@@ -743,51 +747,47 @@ c$$$       enddo
          kk = 0
 !     FIXME Figure out a better way to do this!
          do jj=1,2**n
+            quantum_gate_coo_a(kk+1) = 0
             control_jj = binary_rep(control,jj,n)
             target_jj  = binary_rep(target,jj,n)
             do ii=1,2**n
-               control_ii = binary_rep(control,ii,n)
-               target_ii  = binary_rep(target,ii,n)
-               if((control_ii.eq.0).and.(control_jj.eq.0).and.
-     $              (target_ii.eq.0).and.(target_jj.eq.0)) then
-                  print*,'00 00'
-                  print*,'i: ',ii,' j: ',jj
-                  print*,'c i: ',control_ii,' c j:',control_jj
-                  print*,'t i: ',target_ii,' t j:',target_jj
-                  kk = kk + 1
-                  quantum_gate_coo_ia(kk) = ii
-                  quantum_gate_coo_ja(kk) = jj
-                  quantum_gate_coo_a(kk) = 1.0
-               else if((control_ii.eq.0).and.(control_jj.eq.0).and.
-     $                 (target_ii.eq.1).and.(target_jj.eq.1)) then
-                  print*,'00 11'
-                  print*,'i: ',ii,' j: ',jj
-                  print*,'c i: ',control_ii,' c j:',control_jj
-                  print*,'t i: ',target_ii,' t j:',target_jj
-                  kk = kk + 1
-                  quantum_gate_coo_ia(kk) = ii
-                  quantum_gate_coo_ja(kk) = jj
-                  quantum_gate_coo_a(kk) = 1.0
-               else if((control_ii.eq.1).and.(control_jj.eq.1).and.
-     $                 (target_ii.eq.1).and.(target_jj.eq.0)) then
-                  print*,'11 10'
-                  print*,'i: ',ii,' j: ',jj
-                  print*,'c i: ',control_ii,' c j:',control_jj
-                  print*,'t i: ',target_ii,' t j:',target_jj
-                  kk = kk + 1
-                  quantum_gate_coo_ia(kk) = ii
-                  quantum_gate_coo_ja(kk) = jj
-                  quantum_gate_coo_a(kk) = 1.0
-               else if((control_ii.eq.1).and.(control_jj.eq.1).and.
-     $                 (target_ii.eq.0).and.(target_jj.eq.1)) then
-                  print*,'11 01'
-                  print*,'i: ',ii,' j: ',jj
-                  print*,'c i: ',control_ii,' c j:',control_jj
-                  print*,'t i: ',target_ii,' t j:',target_jj
-                  kk = kk + 1
-                  quantum_gate_coo_ia(kk) = ii
-                  quantum_gate_coo_ja(kk) = jj
-                  quantum_gate_coo_a(kk) = 1.0
+               otherSame = .true.
+               do ll=1,n
+                  if((ll.ne.control).and.(ll.ne.target)) then
+                     if(binary_rep(ll,jj,n).ne.binary_rep(ll,ii,n)) then
+                        otherSame = .false.
+                     endif
+                  endif
+               enddo
+
+               if(otherSame.eqv..true.) then
+                  control_ii = binary_rep(control,ii,n)
+                  target_ii  = binary_rep(target,ii,n)
+                  if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                 (target_ii.eq.0).and.(target_jj.eq.0)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  else if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                    (target_ii.eq.1).and.(target_jj.eq.1)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                    (target_ii.eq.1).and.(target_jj.eq.0)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                    (target_ii.eq.0).and.(target_jj.eq.1)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  endif
                endif
             enddo
          enddo
@@ -799,23 +799,198 @@ c$$$       enddo
      $        quantum_gate_csr_ia(1,generated_gates))
 
          quantum_gate(number_of_gates) = generated_gates
-         do ii=1,5*nstate
-            tmprv(ii) = real(quantum_gate_csr_a(ii,generated_gates))
-         enddo
 
-!debug statements
-         call csrdns(2**n,2**n,tmprv,
-     $        quantum_gate_csr_ja(1,generated_gates),
-     $        quantum_gate_csr_ia(1,generated_gates),dns,2**n,ierr)
-         
-         do ii=1,2**n
-            write(6,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
-         enddo
-
+         cnot_table(target,control) = generated_gates
+c$$$         do ii=1,5*nstate
+c$$$            tmprv(ii) = real(quantum_gate_csr_a(ii,generated_gates))
+c$$$         enddo
+c$$$
+c$$$!debug statements
+c$$$         call csrdns(2**n,2**n,tmprv,
+c$$$     $        quantum_gate_csr_ja(1,generated_gates),
+c$$$     $        quantum_gate_csr_ia(1,generated_gates),dns,2**n,ierr)
+c$$$         
+c$$$         do ii=1,2**n
+c$$$            write(11,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
+c$$$         enddo
+c$$$
 
       else
          quantum_gate(number_of_gates) = 
      $        cnot_table(target,control)
+      endif
+
+      end
+
+
+!*******************************************************************
+!*
+!* Adds a CRk gate to the quantum gate hamiltonian
+!*
+!* inputs:
+!*      control - identifies the control qubit for the CNOT gate
+!*      target  - identifies the target of the qubit
+!*      totalQubits - total number of qubits in the system
+!*      k           - Rk = 1 0
+!*                         0 e^(i*2*pi/2^k)
+!*      time - the time at which the gate should be applied
+!*
+!* outputs:
+!*      none, but stores generated gate in quantum_gate_csr_*,
+!*      the times to apply the gates in quantum_gate_times,
+!*      and the gates to apply in quantum_gate (a pointer into
+!*      the quantum_gate_csr* arrays, allowing us to reuse a 
+!*      previously generated gate).
+!*      
+!*******************************************************************
+      subroutine quantum_add_CRk(control,target,totalQubits,k,gatetime)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer control,target,totalQubits,nzmax
+      real    gatetime,dns(2**totalQubits,2**totalQubits)
+      integer n,ierr,ii,jj,m,kk,binary_rep,ll,k
+      integer control_ii,control_jj,target_ii,target_jj
+      logical otherSame
+      complex ci
+      nzmax   = maxN*10
+      n       = totalQubits
+      ci      = (0,1)
+      !Input checking
+      if ((control.lt.1).or.(control.gt.totalQubits)) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'control qubit number doesn\'t make sense!'
+            print*,'Please use a number greater than 1 and less than the
+     $total number of qubits'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if ((target.lt.1).or.(target.gt.totalQubits)) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'target qubit number doesn\'t make sense!'
+            print*,'Please use a number greater than 1 and less than the
+     $total number of qubits'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if (control.eq.target) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'control and target must be different!'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if(totalQubits.gt.numberOfOps) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'Having more qubits than the number of operators
+     $doesn\'t make any sense!'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if(number_of_gates.gt.0) then
+         if(gatetime.lt.quantum_gate_times(number_of_gates)) then
+            if(nid.eq.0) then
+               print*,'ERROR!'
+               print*,'Please enter gates in order of the time that 
+     $that they will be applied!'
+            endif
+            call exitt()
+         endif
+      endif
+
+      number_of_gates = number_of_gates + 1
+      !Save the time to apply the gate
+      quantum_gate_times(number_of_gates) = gatetime
+
+      !Only regenerate the gate if we haven't seen it yet
+      if(crk_table(target,control,k).eq.0) then
+!Construct the full gate
+         generated_gates = generated_gates + 1
+         kk = 0
+!     FIXME Figure out a better way to do this!
+         do jj=1,2**n
+            quantum_gate_coo_a(kk+1) = 0
+            control_jj = binary_rep(control,jj,n)
+            target_jj  = binary_rep(target,jj,n)
+            do ii=1,2**n
+               otherSame = .true.
+               do ll=1,n
+                  if((ll.ne.control).and.(ll.ne.target)) then
+                     if(binary_rep(ll,jj,n).ne.binary_rep(ll,ii,n)) then
+                        otherSame = .false.
+                     endif
+                  endif
+               enddo
+
+               if(otherSame.eqv..true.) then
+                  control_ii = binary_rep(control,ii,n)
+                  target_ii  = binary_rep(target,ii,n)
+                  if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                 (target_ii.eq.0).and.(target_jj.eq.0)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  else if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                    (target_ii.eq.1).and.(target_jj.eq.1)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                    (target_ii.eq.0).and.(target_jj.eq.0)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = 1.0
+                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                    (target_ii.eq.1).and.(target_jj.eq.1)) then
+                     kk = kk + 1
+                     quantum_gate_coo_ia(kk) = ii
+                     quantum_gate_coo_ja(kk) = jj
+                     quantum_gate_coo_a(kk) = exp(ci*2*pi/(2**k))
+                  endif
+               endif
+            enddo
+         enddo
+
+!subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
+         call coocsr(2**(n),kk,quantum_gate_coo_a,quantum_gate_coo_ia,
+     $        quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
+     $        quantum_gate_csr_ja(1,generated_gates),
+     $        quantum_gate_csr_ia(1,generated_gates))
+
+         quantum_gate(number_of_gates) = generated_gates
+         crk_table(target,control,k)   = generated_gates
+c$$$         do ii=1,5*nstate
+c$$$            tmprv(ii) = real(quantum_gate_csr_a(ii,generated_gates))
+c$$$         enddo
+c$$$
+c$$$!debug statements
+c$$$         call csrdns(2**n,2**n,tmprv,
+c$$$     $        quantum_gate_csr_ja(1,generated_gates),
+c$$$     $        quantum_gate_csr_ia(1,generated_gates),dns,2**n,ierr)
+c$$$         
+c$$$         do ii=1,2**n
+c$$$            write(11,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
+c$$$         enddo
+c$$$
+
+      else
+         quantum_gate(number_of_gates) = 
+     $        crk_table(target,control,k)
       endif
 
       end
