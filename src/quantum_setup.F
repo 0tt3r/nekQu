@@ -28,6 +28,13 @@
          enddo
       enddo
 
+      !zero out the cnot_table
+      do ii=1,maxOp
+         do jj=1,maxOp
+            cnot_table(ii,jj) = 0
+         enddo
+      enddo
+
       end
 
 !**************************************************************
@@ -612,6 +619,176 @@ c$$$       enddo
       end
 
 
+!*******************************************************************
+!*
+!* Adds a CNOT gate to the quantum gate hamiltonian
+!*
+!* inputs:
+!*      control - identifies the control qubit for the CNOT gate
+!*      target  - identifies the target of the qubit
+!*      totalQubits - total number of qubits in the system
+!*      time - the time at which the gate should be applied
+!*
+!* outputs:
+!*      none, but stores generated gate in quantum_gate_csr_*,
+!*      the times to apply the gates in quantum_gate_times,
+!*      and the gates to apply in quantum_gate (a pointer into
+!*      the quantum_gate_csr* arrays, allowing us to reuse a 
+!*      previously generated gate).
+!*      
+!*******************************************************************
+      subroutine quantum_add_CNOT(control,target,totalQubits,gatetime)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer control,target,totalQubits,nzmax
+      real    gatetime,dns(2**totalQubits,2**totalQubits)
+      integer n,ierr,ii,jj,m,kk
+      integer control_ii,control_jj,target_ii,target_jj
+      nzmax   = maxN*10
+      n       = totalQubits
+
+      !Input checking
+      if ((control.lt.1).or.(control.gt.totalQubits)) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'control qubit number doesn\'t make sense!'
+            print*,'Please use a number greater than 1 and less than the
+     $total number of qubits'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if ((target.lt.1).or.(target.gt.totalQubits)) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'target qubit number doesn\'t make sense!'
+            print*,'Please use a number greater than 1 and less than the
+     $total number of qubits'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if (control.eq.target) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'control and target must be different!'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if(totalQubits.gt.numberOfOps) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'Having more qubits than the number of operators
+     $doesn\'t make any sense!'
+         endif
+         call exitt()
+      endif
+
+      !Input checking
+      if(number_of_gates.gt.0) then
+         if(gatetime.lt.quantum_gate_times(number_of_gates)) then
+            if(nid.eq.0) then
+               print*,'ERROR!'
+               print*,'Please enter gates in order of the time that 
+     $that they will be applied!'
+            endif
+            call exitt()
+         endif
+      endif
+
+      number_of_gates = number_of_gates + 1
+      !Save the time to apply the gate
+      quantum_gate_times(number_of_gates) = gatetime
+
+      !Only regenerate the gate if we haven't seen it yet
+      if(cnot_table(target,control).eq.0) then
+!Construct the full gate
+         generated_gates = generated_gates + 1
+         kk = 0
+!     FIXME Figure out a better way to do this!
+         do jj=1,nstate
+            control_jj = state(control,mod(jj-1,oldN(control))+1)
+            target_jj  = state(target,mod(jj-1,oldN(target))+1)
+            do ii=1,nstate
+               control_ii = state(control,mod(ii-1,oldN(control))+1)
+               target_ii  = state(target,mod(ii-1,oldN(target))+1)
+               if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $              (target_ii.eq.0).and.(target_jj.eq.0)) then
+                  print*,'00 00'
+                  print*,'i: ',ii,' j: ',jj
+                  print*,'c i: ',control_ii,' c j:',control_jj
+                  print*,'t i: ',target_ii,' t j:',target_jj
+                  kk = kk + 1
+                  quantum_gate_coo_ia(kk) = ii
+                  quantum_gate_coo_ja(kk) = jj
+                  quantum_gate_coo_a(kk) = 1.0
+               else if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                 (target_ii.eq.1).and.(target_jj.eq.1)) then
+                  print*,'00 11'
+                  print*,'i: ',ii,' j: ',jj
+                  print*,'c i: ',control_ii,' c j:',control_jj
+                  print*,'t i: ',target_ii,' t j:',target_jj
+                  kk = kk + 1
+                  quantum_gate_coo_ia(kk) = ii
+                  quantum_gate_coo_ja(kk) = jj
+                  quantum_gate_coo_a(kk) = 1.0
+               else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                 (target_ii.eq.1).and.(target_jj.eq.0)) then
+                  print*,'11 10'
+                  print*,'i: ',ii,' j: ',jj
+                  print*,'c i: ',control_ii,' c j:',control_jj
+                  print*,'t i: ',target_ii,' t j:',target_jj
+                  kk = kk + 1
+                  quantum_gate_coo_ia(kk) = ii
+                  quantum_gate_coo_ja(kk) = jj
+                  quantum_gate_coo_a(kk) = 1.0
+               else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                 (target_ii.eq.0).and.(target_jj.eq.1)) then
+                  print*,'11 01'
+                  print*,'i: ',ii,' j: ',jj
+                  print*,'c i: ',control_ii,' c j:',control_jj
+                  print*,'t i: ',target_ii,' t j:',target_jj
+                  kk = kk + 1
+                  quantum_gate_coo_ia(kk) = ii
+                  quantum_gate_coo_ja(kk) = jj
+                  quantum_gate_coo_a(kk) = 1.0
+               endif
+            enddo
+         enddo
+
+!subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
+         call coocsr(2**(n),kk,quantum_gate_coo_a,quantum_gate_coo_ia,
+     $        quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
+     $        quantum_gate_csr_ja(1,generated_gates),
+     $        quantum_gate_csr_ia(1,generated_gates))
+
+         quantum_gate(number_of_gates) = generated_gates
+         do ii=1,5*nstate
+            tmprv(ii) = real(quantum_gate_csr_a(ii,generated_gates))
+         enddo
+
+!debug statements
+         call csrdns(2**n,2**n,tmprv,
+     $        quantum_gate_csr_ja(1,generated_gates),
+     $        quantum_gate_csr_ia(1,generated_gates),dns,2**n,ierr)
+         
+         do ii=1,2**n
+            write(6,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
+         enddo
+
+
+      else
+         quantum_gate(number_of_gates) = 
+     $        cnot_table(target,control)
+      endif
+
+      end
 
 !*******************************************************************
 !*
@@ -656,7 +833,6 @@ c$$$       enddo
       nzmax   = maxN*10
       ci = (0,1)
 
-
       !Input checking
       if ((qubit.lt.1).or.(qubit.gt.totalQubits)) then
          if(nid.eq.0) then
@@ -689,6 +865,7 @@ c$$$       enddo
             call exitt()
          endif
       endif
+
 
       !Construct one of the six basic 2x2 gates
       ! FIXME: Consider storing these somewhere?
@@ -734,7 +911,7 @@ c$$$       enddo
 
       number_of_gates = number_of_gates + 1
       m = totalQubits - qubit + 1
-!      qubit = totalQubits - qubit + 1
+!      qubit = totalQubits - qubit +1 
 !      qubit = totalQubits - qubit + 1
 
       !Save the time to apply the gate
@@ -750,9 +927,9 @@ c$$$       enddo
      $        gates_table(gateIdentifier,m)
       endif
 
-      do ii=1,5*nstate
-         tmprv(ii) = real(quantum_gate_csr_a(ii,gate))
-      enddo
+c$$$      do ii=1,5*nstate
+c$$$         tmprv(ii) = real(quantum_gate_csr_a(ii,gate))
+c$$$      enddo
 
 c$$$      !debug statements
 c$$$      call csrdns(2**n,2**n,tmprv,
