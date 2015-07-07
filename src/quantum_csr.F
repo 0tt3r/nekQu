@@ -472,26 +472,27 @@ c---------------------------------------------------------------------
 
       !Maybe give these definite sizeps?
       integer ii,jj,kk,istart,iend,mat_ia(*),mat_ja(*)
-      real    sum
-      complex mat_a(*)
+      complex sum,mult,ci
+      complex mat_a(*)      
       complex rrho (maxN,maxN/lp)
       complex tmprr(maxN,maxN/lp)
 
-!$acc data present(ham_ia,ham_ja,ham_a,rrho,tmprr)
-!$acc parallel loop private(istart,iend)
-      do jj=1,nstate_np
-!$acc loop vector private(sum)
-      do ii=1,nstate
-         istart = mat_ia(ii)
-         iend   = mat_ia(ii+1)-1
-         sum = 0
-         do kk=istart,iend
-            sum = sum + mat_a(kk)*rrho(mat_ja(kk),jj)
+!     $acc data present(ham_ia,ham_ja,ham_a,rrho,tmprr)
+!     $acc parallel loop private(istart,iend)
+         do jj=1,nstate_np
+!     $acc loop vector private(sum)
+            do ii=1,nstate
+               istart = mat_ia(ii)
+               iend   = mat_ia(ii+1)-1
+               sum = 0
+               do kk=istart,iend
+                  sum = sum + mat_a(kk)*rrho(mat_ja(kk),jj)
+               enddo
+               tmprr(ii,jj) = sum
+            enddo
          enddo
-         tmprr(ii,jj) = sum
-      enddo
-      enddo
 !$acc end data
+
 
       return
       end
