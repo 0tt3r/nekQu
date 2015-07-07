@@ -73,7 +73,7 @@ c!$acc update device(resrho_i)
       qrtime3= 0.0
       qrtime4= 0.0
 
-      dt           = timemax/(nqstep-1)
+      dt           = timemax/(nqstep)
       printdt      = dt
       obsPrintSkip =1 
       time    = 0
@@ -760,10 +760,10 @@ c!$omp end parallel do
 
       if(time.gt.quantum_gate_times(current_gate).and.
      $     (current_gate.le.number_of_gates)) then
-c$$$         print*,"Rho before"
-c$$$         do ii=1,nstate
-c$$$            write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
-c$$$         enddo
+         print*,"Rho before"
+         do ii=1,nstate
+            write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
+         enddo
 
 
          do jj=1,nstate_np
@@ -786,10 +786,10 @@ c$$$         enddo
                tmpiv(j0) = imag(tmp_c1(ii,jj))
             enddo
          enddo
-c$$$         print*,"after mxm 1"
-c$$$         do ii=1,nstate
-c$$$            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
-c$$$         enddo
+         print*,"after mxm 1"
+         do ii=1,nstate
+            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
+         enddo
 
 
 !     Do (Um*rho)^dagger
@@ -814,10 +814,10 @@ c$$$         enddo
                endif
             enddo
          enddo        
-c$$$         print*,"after conj transpose"
-c$$$         do ii=1,nstate
-c$$$            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
-c$$$         enddo
+         print*,"after conj transpose"
+         do ii=1,nstate
+            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
+         enddo
 
 
 !     calculate Um*(Um*rho)^dag
@@ -833,10 +833,10 @@ c$$$         enddo
             enddo
          enddo
 
-c$$$         print*,"Rho after"
-c$$$         do ii=1,nstate
-c$$$            write(6,'(100g25.15)') (rho(ii,jj), jj=1,nstate)
-c$$$         enddo
+         print*,"Rho after"
+         do ii=1,nstate
+            write(6,'(100g25.15)') (rho(ii,jj), jj=1,nstate)
+         enddo
 
 !     Increment the current_gate
          current_gate = current_gate + 1

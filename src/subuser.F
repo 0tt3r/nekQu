@@ -25,12 +25,12 @@ c-----------------------------------------------------------------------
       
       debug         = 1
       
-      numberOfQubits = 3
+      numberOfQubits = 4
       call quantum_setup_initialize()
       useGates = .true.
       timeunit = 1
-      timemax = 10
-      nqstep  = 11
+      timemax = 20
+      nqstep  = 20
       !Create all of the ops
       do ii=1,numberOfQubits
          call quantum_create_op(2,qubit(1,ii),qubit(2,ii),qubit(3,ii))
@@ -38,9 +38,25 @@ c-----------------------------------------------------------------------
 
       call quantum_finalize_op_csr()
 
-      call quantum_add_gate(1,numberOfQubits,1,3.0)
-      call quantum_add_cnot(2,1,numberOfQubits,5.0)
-!      call quantum_add_gate(2,numberOfQubits,1,5.0)
+      !6 = hadamard gate
+      call quantum_add_gate(1,numberOfQubits,6,1.0)
+      call quantum_add_crk(2,1,numberOfQubits,2,2.0)
+      call quantum_add_crk(3,1,numberOfQubits,3,3.0)
+      call quantum_add_crk(4,1,numberOfQubits,4,4.0)
+
+      !6 = hadamard gate
+      call quantum_add_gate(2,numberOfQubits,6,5.0)
+      call quantum_add_crk(3,2,numberOfQubits,2,6.0)
+      call quantum_add_crk(4,2,numberOfQubits,3,7.0)
+
+      !6 = hadamard gate
+      call quantum_add_gate(3,numberOfQubits,6,8.0)
+      call quantum_add_crk(4,3,numberOfQubits,2,9.0)
+
+      call quantum_add_gate(4,numberOfQubits,6,10.0)
+
+!      call quantum_add_crk(4,2,numberOfQubits,7.0)
+!      call quantum_add_gate(2,numberOfQubits,1,6.0)
 !      call quantum_add_gate(3,numberOfQubits,1,7.0)
 
 
