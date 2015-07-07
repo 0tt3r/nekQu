@@ -38,7 +38,7 @@ c-----------------------------------------------------------------------
 
       call quantum_finalize_op_csr()
 
-      call quantum_add_gate(1,numberOfQubits,1,3.0)
+      call quantum_add_gate(1,numberOfQubits,5,3.0)
       call quantum_add_gate(2,numberOfQubits,1,5.0)
       call quantum_add_gate(3,numberOfQubits,1,7.0)
 

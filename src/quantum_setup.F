@@ -718,10 +718,10 @@ c$$$       enddo
          um(2,1) = 0
          um(2,2) = exp(ci*pi/4)
       else if(gateIdentifier.eq.6) then
-         um(1,1) = 2**(-1/2)
-         um(1,2) = 2**(-1/2)
-         um(2,1) = 2**(-1/2)
-         um(2,2) = -2**(-1/2)
+         um(1,1) = 2**(-0.5)
+         um(1,2) = 2**(-0.5)
+         um(2,1) = 2**(-0.5)
+         um(2,2) = -2**(-0.5)
       else
          !Input checking
          if(nid.eq.0) then
@@ -750,11 +750,11 @@ c$$$       enddo
      $        gates_table(gateIdentifier,m)
       endif
 
-c$$$      do ii=1,5*nstate
-c$$$         tmprv(ii) = real(quantum_gate_csr_a(ii,gate))
-c$$$      enddo
-c$$$
-c$$$      !Debug statements
+      do ii=1,5*nstate
+         tmprv(ii) = real(quantum_gate_csr_a(ii,gate))
+      enddo
+
+c$$$      !debug statements
 c$$$      call csrdns(2**n,2**n,tmprv,
 c$$$     $     quantum_gate_csr_ja(1,gate),
 c$$$     $     quantum_gate_csr_ia(1,gate),dns,2**n,ierr)
@@ -762,6 +762,8 @@ c$$$
 c$$$      do ii=1,2**n
 c$$$         write(6,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
 c$$$      enddo
+
+
 
       end
 

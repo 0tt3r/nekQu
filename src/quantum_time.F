@@ -753,6 +753,11 @@ c!$omp end parallel do
 
       if(time.gt.quantum_gate_times(current_gate).and.
      $     (current_gate.le.number_of_gates)) then
+c$$$         print*,"Rho before"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
+c$$$         enddo
+
 
          do jj=1,nstate_np
             do ii=1,nstate
@@ -774,6 +779,10 @@ c!$omp end parallel do
                tmpiv(j0) = imag(tmp_c1(ii,jj))
             enddo
          enddo
+c$$$         print*,"after mxm 1"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
+c$$$         enddo
 
 
 !     Do (Um*rho)^dagger
@@ -793,9 +802,15 @@ c!$omp end parallel do
 !     We want -b, so we take a - (a+b)
                   tmp_c1(kk,jj) = tmprv(j0) - real(tmp_c1(kk,jj))
      $                 + ci*(imag(tmp_c1(kk,jj)) - tmpiv(j0))
+               else
+                  tmp_c1(kk,jj) = conjg(tmp_c1(kk,jj))
                endif
             enddo
          enddo        
+c$$$         print*,"after conj transpose"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
+c$$$         enddo
 
 
 !     calculate Um*(Um*rho)^dag
@@ -810,6 +825,11 @@ c!$omp end parallel do
                rho_i(ii,jj) = imag(rho(ii,jj))
             enddo
          enddo
+
+c$$$         print*,"Rho after"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (rho(ii,jj), jj=1,nstate)
+c$$$         enddo
 
 !     Increment the current_gate
          current_gate = current_gate + 1
