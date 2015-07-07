@@ -25,7 +25,7 @@ c-----------------------------------------------------------------------
       
       debug         = 1
       
-      numberOfQubits = 3
+      numberOfQubits = 2
       call quantum_setup_initialize()
       useGates = .true.
       timeunit = 1
@@ -38,9 +38,10 @@ c-----------------------------------------------------------------------
 
       call quantum_finalize_op_csr()
 
-      call quantum_add_gate(1,numberOfQubits,5,3.0)
-      call quantum_add_gate(2,numberOfQubits,1,5.0)
-      call quantum_add_gate(3,numberOfQubits,1,7.0)
+      call quantum_add_gate(1,numberOfQubits,1,3.0)
+      call quantum_add_cnot(1,2,numberOfQubits,5.0)
+!      call quantum_add_gate(2,numberOfQubits,1,5.0)
+!      call quantum_add_gate(3,numberOfQubits,1,7.0)
 
 
       call quantum_ham_finalize_csr()
