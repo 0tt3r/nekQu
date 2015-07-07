@@ -620,6 +620,36 @@ c$$$       enddo
 
       end
 
+!*******************************************************************
+!*
+!* Returns the binary rep for a specific bit, given a epcific number
+!* useful for representing the heading as the 2 qubit states
+!* 
+!*******************************************************************
+
+
+      integer function binary_rep(bit,number,numberOfBits)
+      implicit none
+
+      integer bit,number,currentBit,maxNumber,localNumber,ii
+      integer numberOfBits
+      localNumber = number-1
+      currentBit = 0
+      if(number-2**(bit-1).lt.0) then 
+         binary_rep=0
+         return
+      endif
+      do ii=1,numberOfBits+1
+         currentBit = currentBit+1
+         binary_rep = mod(localNumber,2)
+         if(currentBit.eq.bit) then
+            return
+         endif
+         localNumber = int(real(localNumber/2))
+      enddo
+      
+      end
+
 
 !*******************************************************************
 !*
@@ -646,7 +676,7 @@ c$$$       enddo
 
       integer control,target,totalQubits,nzmax
       real    gatetime,dns(2**totalQubits,2**totalQubits)
-      integer n,ierr,ii,jj,m,kk
+      integer n,ierr,ii,jj,m,kk,binary_rep
       integer control_ii,control_jj,target_ii,target_jj
       nzmax   = maxN*10
       n       = totalQubits
@@ -714,12 +744,12 @@ c$$$       enddo
          generated_gates = generated_gates + 1
          kk = 0
 !     FIXME Figure out a better way to do this!
-         do jj=1,nstate
-            control_jj = state(control,mod(jj-1,oldN(control))+1)
-            target_jj  = state(target,mod(jj-1,oldN(target))+1)
-            do ii=1,nstate
-               control_ii = state(control,mod(ii-1,oldN(control))+1)
-               target_ii  = state(target,mod(ii-1,oldN(target))+1)
+         do jj=1,2**n
+            control_jj = binary_rep(control,jj,n)
+            target_jj  = binary_rep(target,jj,n)
+            do ii=1,2**n
+               control_ii = binary_rep(control,ii,n)
+               target_ii  = binary_rep(target,ii,n)
                if((control_ii.eq.0).and.(control_jj.eq.0).and.
      $              (target_ii.eq.0).and.(target_jj.eq.0)) then
                   print*,'00 00'
