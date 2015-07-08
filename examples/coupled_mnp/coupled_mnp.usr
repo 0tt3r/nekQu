@@ -12,8 +12,8 @@ c-----------------------------------------------------------------------
       real omega1,debye,omega2,radius,g_couple_1_1,g_couple_2_2
       integer ii,jj,kk
       !Operator handles below
-      integer sa1,sa1t,sa1n,sa2,sa2t,sa2n
-      integer sb1,sb1t,sb1n,sb2,sb2t,sb2n
+      integer sa1,sa1t,sa1n,sa2,sa2t,sa2n,sa2nt,sa1nt
+      integer sb1,sb1t,sb1n,sb2,sb2t,sb2n,sb2nt,sb1nt
       integer sa1t_sb1,sa1_sb1t,sa2t_sb1,sa2_sb1t
       integer sa1t_sb2,sa1_sb2t,sa2t_sb2,sa2_sb2t
       integer sa1_a_sa1t,sb1_a_sb1t
@@ -40,7 +40,7 @@ c-----------------------------------------------------------------------
       Emax             = 3.5 
       Emin             = 2.5
       nEh              = 100
-      nqstep           = 2500
+      nqstep           = 3000
 !     Setup pulse things
       c_speed          = 2.99792458d10 !cm/s
       d_per_au         = 1.0d0 / 3.93430307d-1
@@ -61,7 +61,8 @@ c-----------------------------------------------------------------------
 
       call quantum_setup_initialize()
 
-      ifPulse = .true.
+      ifPulse          = .true.
+      !RWA = .false. does not work at the moment
       rwa              = .true.
       calc_concurrence = .false.
 
@@ -75,6 +76,12 @@ c-----------------------------------------------------------------------
 
       call quantum_combine_op_csr(sa1t,sb1,1,sa1t_sb1)
       call quantum_combine_op_csr(sa1,sb1t,1,sa1_sb1t)
+
+      call quantum_combine_op_csr(sb1,sb1t,1,sb1nt)
+      call quantum_combine_op_csr(sa1,sa1t,1,sa1nt)
+
+      call quantum_combine_op_csr(sb2,sb2t,1,sb2nt)
+      call quantum_combine_op_csr(sa2,sa2t,1,sa2nt)
 
       call quantum_combine_op_csr(sa2t,sb1,1,sa2t_sb1)
       call quantum_combine_op_csr(sa2,sb1t,1,sa2_sb1t)
@@ -93,6 +100,12 @@ c-----------------------------------------------------------------------
       call quantum_add_to_ham_csr(sa2n,omega2,0)
       call quantum_add_to_ham_csr(sa1n,omega1,0)      
       call quantum_add_to_ham_csr(sb1n,omega1,0)
+
+c$$$      call quantum_add_to_ham_csr(sb2nt,omega2,0)
+c$$$      call quantum_add_to_ham_csr(sa2nt,omega2,0)
+c$$$      call quantum_add_to_ham_csr(sa1nt,omega1,0)      
+c$$$      call quantum_add_to_ham_csr(sb1nt,omega1,0)
+
 
       !Driving terms
       call quantum_add_to_ham_csr(sa1_a_sa1t,-mu_sa,1)

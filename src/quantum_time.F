@@ -50,7 +50,8 @@ c$$$      rho_r(2,2) = 0.5
 c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
-      if(nid.eq.0) rho_r(2,2) = 1
+!FIXME: Move density matrix initialization to user routine!
+      if(nid.eq.0) rho_r(1,1) = 1
 
 c!$acc end parallel
 
@@ -692,7 +693,11 @@ c!$omp end parallel do
 c!$omp parallel do collapse(1)
       do jj = 1,nstate_np
       do ii = 1,nstate
-         tmpfq= state_sums(ii,jj)*pulse_omega_0*rho(ii,jj)
+         if(rwa.eqv..true.) then
+            tmpfq= state_sums(ii,jj)*pulse_omega_0*rho(ii,jj)
+         else
+            tmpfq = 0
+         endif
          tmprr= 2*tmp_r1(ii,jj)-tmprv((jj-1)*nstate+ii)
 !         if(ii.eq.jj+c_offset) tmprr = 0
          tmpii = tmpiv((jj-1)*nstate+ii)
@@ -707,8 +712,12 @@ c!$omp parallel do collapse(1)
 
 !     The diagonal parts need special treatment
       do jj=1,nstate_np
-         tmpfq= state_sums(jj+c_offset,jj)*pulse_omega_0
-     $        *rho(jj+c_offset,jj)
+         if(rwa.eqv..true.) then 
+            tmpfq= state_sums(jj+c_offset,jj)*pulse_omega_0
+     $           *rho(jj+c_offset,jj)
+         else
+            tmpfq = 0
+         endif
          tmpcc = ci*2*tmp_i1(jj+c_offset,jj)
          drho(jj+c_offset,jj) = -ci*(tmpcc-tmpfq)
          resrho_r(jj+c_offset,jj) = real(drho(jj+c_offset,jj))
@@ -859,8 +868,11 @@ c-------------------------------------------------------------------
       do ii=1,nstate
          tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
          if(ifPulse.eqv..true.) then
-            tmp_c1(ii,jj) = tmp_c1(ii,jj)*
-     $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+            if(rwa.eqv..true.) then
+               tmp_c1(ii,jj) = tmp_c1(ii,jj)*
+     $              *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $              *(time-pulse_t_0))
+            endif
          endif
       enddo
       enddo
@@ -941,7 +953,11 @@ c--------------------------------------------------------------------
       do jj=1,nstate_np
       do ii=1,nstate
             tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
-     $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+            if(rwa.eqv..true.) then
+               tmp_c1(ii,jj) = tmp_c1(ii,jj)
+     $              *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $              *(time-pulse_t_0))
+            endif
       enddo
       enddo
 !$acc end parallel loop
@@ -1037,7 +1053,11 @@ c     store result in red_rho
 !            j0 = j0_array(kk)!(jj-1)*nstate+ii
             j0 = (jj-1)*nstate+ii
             red_rho(ii,jj) = (tmprv(j0) + ci*tmpiv(j0))
-     $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+            if(rwa.eqv..true.) then
+               red_rho(ii,jj) = red_rho(ii,jj)
+     $              *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $              *(time-pulse_t_0))
+            endif
 !            kk = kk+1
          enddo
       enddo
