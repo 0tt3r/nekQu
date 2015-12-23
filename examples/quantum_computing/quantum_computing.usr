@@ -18,49 +18,99 @@ c-----------------------------------------------------------------------
       include 'mpif.h'
 
       integer ii,jj,kk,numberOfQubits
-      integer qubit(3,10) !qubit stores all of the handles
+      
+      integer qubit(3,10)       !qubit stores all of the handles
                           !qubit(1,ii) is the annihilation operator for qubit ii
                           !qubit(2,ii) is the creation operator for qubit ii
                           !qubit(3,ii) is the number operator for qubit ii
+      integer couple(2,10,10)  !couple(1,i,j) = q_i^t q_j
+                               !couple(2,i,j) = q_i q_j^t
+
+      real eV,debye,gamma_pi,gamma_di,gamma_s,omega,g_couple
+      real gateTimeStep,gateTime,zeroOut
+      eV       = 27.21140                ! energy Eh  
+      debye     = 0.3934303070      
+
+      zeroOut  = 1.0
+      gamma_pi = 0*1.9d-7/eV*zeroOut
+      gamma_di = 0*2.0d-3/eV*zeroOut
+
+      omega    = 2.05/eV*zeroOut
       
-      debug         = 1
+      g_couple  = 0*1e-3/eV*zeroOut
       
-      numberOfQubits = 4
+      numberOfQubits = 3
+
+
+      timeunit= 2.418884326505e-17        ! hbar/Eh(hartree) SI unit       
+      timemax     = 10e-13/timeunit
+      nqstep      = 5000
+
       call quantum_setup_initialize()
+
+
+      calc_concurrence = .true.
       useGates = .true.
-      timeunit = 1
-      timemax = 20
-      nqstep  = 20
+
       !Create all of the ops
       do ii=1,numberOfQubits
          call quantum_create_op(2,qubit(1,ii),qubit(2,ii),qubit(3,ii))
       enddo
 
       call quantum_finalize_op_csr()
+      !combine ops for coupling terms
+      !qubit(1,i) = q_i, qubit(2,i) = q_i^t, qubit(3,i) = q_i^t q_i
+      do ii=1,numberOfQubits
+         do jj=ii+1,numberOfQubits
+            call quantum_combine_op_csr(qubit(2,ii),qubit(1,jj),1,
+     $           couple(1,ii,jj))
+            call quantum_combine_op_csr(qubit(1,ii),qubit(2,jj),1,
+     $           couple(2,ii,jj))
+         enddo
+      enddo
 
-      !6 = hadamard gate
-      call quantum_add_gate(1,numberOfQubits,6,1.0)
-      call quantum_add_crk(2,1,numberOfQubits,2,2.0)
-      call quantum_add_crk(3,1,numberOfQubits,3,3.0)
-      call quantum_add_crk(4,1,numberOfQubits,4,4.0)
+      !Oscillator terms
+      do ii=1,numberOfQubits
+         call quantum_add_to_ham_csr(qubit(3,ii),omega,0)      
+      enddo
 
-      !6 = hadamard gate
-      call quantum_add_gate(2,numberOfQubits,6,5.0)
-      call quantum_add_crk(3,2,numberOfQubits,2,6.0)
-      call quantum_add_crk(4,2,numberOfQubits,3,7.0)
-
-      !6 = hadamard gate
-      call quantum_add_gate(3,numberOfQubits,6,8.0)
-      call quantum_add_crk(4,3,numberOfQubits,2,9.0)
-
-      call quantum_add_gate(4,numberOfQubits,6,10.0)
-
-!      call quantum_add_crk(4,2,numberOfQubits,7.0)
-!      call quantum_add_gate(2,numberOfQubits,1,6.0)
-!      call quantum_add_gate(3,numberOfQubits,1,7.0)
-
+      !Coupling terms
+      do ii=1,numberOfQubits
+         do jj=ii+1,numberOfQubits
+            call quantum_add_to_ham_csr(couple(1,ii,jj),-g_couple,0)
+            call quantum_add_to_ham_csr(couple(2,ii,jj),-g_couple,0)
+         enddo
+      enddo
 
       call quantum_ham_finalize_csr()
+
+      !Lindblad terms
+      do ii=1,numberOfQubits
+         call quantum_lin_add(qubit(1,ii),qubit(3,ii),-gamma_pi/2)
+         call quantum_lin_add(qubit(3,ii),qubit(3,ii),-gamma_di)
+      enddo
+
+      call quantum_lin_finalize()
+      debug         = 1
+
+
+      gateTime     = 1e-13
+      gateTimeStep = 1e-13/timeunit
+      !QFT below
+      do ii=1,numberOfQubits
+      !6 = hadamard gate
+         call quantum_add_gate(ii,numberOfQubits,6,gateTime)
+         print*,'ii',ii,gateTime
+         gateTime = gateTime + gateTimeStep
+         print*,'ii',ii,gateTime
+         do jj=ii+1,numberOfQubits
+            call quantum_add_crk (jj,ii,numberOfQubits,2,gateTime)
+            print*,'jj',jj,gateTime
+            gateTime = gateTime + gateTimeStep
+            print*,'jj',jj,gateTime
+         enddo
+      enddo
+
 
       call cem_quantum3_propagation_rk
 

@@ -1,4 +1,4 @@
-c----------------------------------------------------------------------
+C----------------------------------------------------------------------
 c
 c  USER SPECIFIED ROUTINES:
 c
@@ -17,50 +17,110 @@ c-----------------------------------------------------------------------
       include 'QUANT'
       include 'mpif.h'
 
-      integer ii,jj,kk,numberOfQubits
-      integer qubit(3,10) !qubit stores all of the handles
-                          !qubit(1,ii) is the annihilation operator for qubit ii
-                          !qubit(2,ii) is the creation operator for qubit ii
-                          !qubit(3,ii) is the number operator for qubit ii
+      real op(160,160)
+      real omega,g_couple,eV,gamma_di,gamma_pi,gamma_s,mu_s,mu_q
+      real c_speed,d_per_au,eesu_per_au,eps_med,fluence,tmpint
+      real omega2,debye,omega3,radius,g_couple2,g_couple3
+      integer qd1,qd1t,qd1n,sp,spt,spn
+      integer qd2,qd2t,qd2n,ii,jj,kk,j0
+      integer qd1t_sp,qd1_spt,sp2,sp2t,sp2n
+      integer qd2t_sp,qd2_spt,ierr,qd2t_sp2,qd2_sp2t
+      integer qd1t_spt,qd1_sp,sp2_qd1t,sp2t_qd1
+      integer qd1_a_qd1t,qd2_a_qd2t,sp_a_spt
+      integer qd3,qd3t,qd3n,qd3_a_qd3t,qd3t_sp,qd3_spt
       
+      !Read the simple input
+      eV       = 27.21140                ! energy Eh  
+      debye     = 0.3934303070      
+
+      mu_s     = 4d3*debye
+      mu_q     = 1.3d1*debye
+
+      gamma_pi = 1.9d-7/eV
+      gamma_di = 2.0d-3/eV
+      gamma_s  = 1.5d-1/eV
+
+      omega    = 2.05/eV    
+      omega2   = 2.05/eV
+      
+      g_couple  = 30*1e-3/eV
+
+      fluence = 0*1e-9*1e7
+      pulse_omega_0 = 2.05/eV!omega
+
       debug         = 1
       
-      numberOfQubits = 4
+!     Parameters for energy spectrum
+
+      Emax = 2.14
+      Emin = 1.94
+      nEh  = 100
+
+!     Setup pulse things
+      c_speed = 2.99792458d10 !cm/s
+      d_per_au = 1.0d0 / 3.93430307d-1
+      eesu_per_au = 5.14220652d17 / c_speed
+      timeunit= 2.418884326505e-17        ! hbar/Eh(hartree) SI unit       
+      eps_med     = 2.25
+!      fluence     = 1.0e-9*1d7  ! nJ/cm**2
+      pi          = 4.*ATAN(1.0)
+      pulse_duration = 2e-14/timeunit
+      timemax     = 10e-13/timeunit
+      nqstep      = 5000
+      pulse_t_0     = 1e-13/timeunit
+      numsp       = 2 
+      ltonq       = 4
+
+      tmpint = 5e-1 * sqrt(5d-1 * pi/(2d0*log(2d0)/pulse_duration**2))
+     $     * (1e0 + exp(-5e-1 * pulse_omega_0 ** 2 / 
+     $     (2d0*log(2d0)/pulse_duration**2)))*timeunit
+      energy0_pls =sqrt(4*pi*fluence/(c_speed*sqrt(eps_med)*tmpint))
+      energy0_pls = energy0_pls / eesu_per_au
+      
+
       call quantum_setup_initialize()
-      useGates = .true.
-      timeunit = 1
-      timemax = 20
-      nqstep  = 20
-      !Create all of the ops
-      do ii=1,numberOfQubits
-         call quantum_create_op(2,qubit(1,ii),qubit(2,ii),qubit(3,ii))
-      enddo
+
+      ifPulse          = .false.
+      rwa              = .false.
+      calc_concurrence = .true.
+      
+      call quantum_create_op(2,qd1,qd1t,qd1n)
+      call quantum_create_op(numsp,sp,spt,spn)
 
       call quantum_finalize_op_csr()
 
-      !6 = hadamard gate
-      call quantum_add_gate(1,numberOfQubits,6,1.0)
-      call quantum_add_crk(2,1,numberOfQubits,2,2.0)
-      call quantum_add_crk(3,1,numberOfQubits,3,3.0)
-      call quantum_add_crk(4,1,numberOfQubits,4,4.0)
+      call quantum_combine_op_csr(qd1t,sp,1,qd1t_sp)
 
-      !6 = hadamard gate
-      call quantum_add_gate(2,numberOfQubits,6,5.0)
-      call quantum_add_crk(3,2,numberOfQubits,2,6.0)
-      call quantum_add_crk(4,2,numberOfQubits,3,7.0)
+      call quantum_combine_op_csr(qd1,spt,1,qd1_spt)
 
-      !6 = hadamard gate
-      call quantum_add_gate(3,numberOfQubits,6,8.0)
-      call quantum_add_crk(4,3,numberOfQubits,2,9.0)
+      call quantum_combine_op_csr(qd1,qd1t,0,qd1_a_qd1t)
 
-      call quantum_add_gate(4,numberOfQubits,6,10.0)
+      call quantum_combine_op_csr(sp,spt,0,sp_a_spt)
 
-!      call quantum_add_crk(4,2,numberOfQubits,7.0)
-!      call quantum_add_gate(2,numberOfQubits,1,6.0)
-!      call quantum_add_gate(3,numberOfQubits,1,7.0)
+      !Oscillator terms
+      call quantum_add_to_ham_csr(qd1n,omega,0)      
+      call quantum_add_to_ham_csr(spn,omega,0)
 
+      !Driving terms
+      call quantum_add_to_ham_csr(qd1_a_qd1t,-mu_q,1)
+      call quantum_add_to_ham_csr(sp_a_spt,-mu_s,1)
+
+      !Coupling terms
+      call quantum_add_to_ham_csr(qd1t_sp,-g_couple,0)
+      call quantum_add_to_ham_csr(qd1_spt,-g_couple,0)
 
       call quantum_ham_finalize_csr()
+
+      call quantum_lin_add(qd1,qd1n,-gamma_pi/2)
+      call quantum_lin_add(qd1n,qd1n,-gamma_di)
+
+      call quantum_lin_add(sp,spn,-gamma_s/2)
+
+      call quantum_lin_finalize()
+
+!     Add observables
+      call quantum_observable(sp_a_spt,mu_s)
+      call quantum_observable(qd1_a_qd1t,mu_q)
 
       call cem_quantum3_propagation_rk
 
@@ -76,9 +136,20 @@ c-----------------------------------------------------------------------
       include 'QUANT'
       real pulse
       real alpha
-      
-      pulse = 0.0
 
+      alpha = 2 * log(2.0)/ (pulse_duration)**2
+      if(rwa.eqv..true.) then
+         pulse = energy0_pls/2.0*exp(-alpha*(time-pulse_t_0)**2)
+      else
+         pulse = energy0_pls/2.0*exp(-alpha*(time-pulse_t_0)**2)
+     $        *cos(pulse_omega_0*time)
+      endif
+
+!      if(nid.eq.1) then
+!      print*,'1',time*timeunit,pulse
+ !     print*,'2',eps_med,c_speed,eesu_per_au,timeunit,pi,time
+
+!      endif
       return
       end
 

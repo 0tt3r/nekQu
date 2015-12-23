@@ -691,7 +691,7 @@ c
                stop
                return
             end if
-            print*,i,j,a(k)
+c            print*,i,j,a(k)
             dns(i,j) = a(k)
  3       continue
  4    continue

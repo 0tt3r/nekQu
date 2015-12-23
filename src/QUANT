@@ -4,7 +4,7 @@
      $                , numberOfLinOps,c_offset,max_time_dep
      $                , lin_comb_nnz,nstate2,ltonq,debug
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
-     $                , nstate_np,iiqstep,obsPrintSkip
+     $                , nstate_np,iiqstep,obsPrintSkip,newVecNumber
      $                , number_of_gates,generated_gates,current_gate
        integer         iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
@@ -12,7 +12,7 @@
      $                , numberOfLinOps,c_offset,max_time_dep
      $                , lin_comb_nnz,nstate2,ltonq,debug
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
-     $                , nstate_np,iiqstep,obsPrintSkip
+     $                , nstate_np,iiqstep,obsPrintSkip,newVecNumber
      $                , number_of_gates,generated_gates,current_gate
 
 c!!! Temporary: level = nzmax, lnumqd=lin_max_ops lnumsp=maxOps
@@ -55,6 +55,8 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , j0_array(maxN*maxN/lp)
      $               , obs_csr_ia(maxN*10+1,maxOp)
      $               , obs_csr_ja(maxN*10,maxOp)
+     $               , vec_state(maxOp/2), vec_to_op(maxOp/2)
+     $               , vec_state2(maxOp/2),handle_to_op(maxOp)
      $               , quantum_gate_coo_ia(2*maxN)
      $               , quantum_gate_coo_ja(2*maxN)
      $               , quantum_gate_csr_ia(2*maxN,maxOp)
@@ -69,7 +71,8 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , lin_l_length,lin_nl_col_length,lin_nl_length
      $               , lin_offset,lin_l_index,lin_tiling_N,ham_i_ia
      $               , op_csr_ia,op_csr_ja,ham_i_ja,ham_d_ja,ham_d_ia
-     $               , j0_array,obs_csr_ia,obs_csr_ja
+     $               , vec_state,vec_to_op,vec_state2
+     $               , j0_array,obs_csr_ia,obs_csr_ja,handle_to_op
      $               , quantum_gate_coo_ia,quantum_gate_coo_ja
      $               , quantum_gate_csr_ia,quantum_gate_csr_ja
      $               , quantum_gate,gates_table,cnot_table,crk_table

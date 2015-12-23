@@ -50,6 +50,7 @@ c$$$      rho_r(2,2) = 0.5
 c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
+!FIXME: Move density matrix initialization to user routine!
       if(nid.eq.0) rho_r(2,2) = 1
 
 c!$acc end parallel
@@ -344,17 +345,13 @@ c      do iqstep= 1,nqstep
        iqstep=1
        iiqstep = 1
        do while(time.lt.timemax)
-!         print *,nid,time
           stime1= dclock()
          do ii= 1,5
-!            call rk_quantum3_c(ii)
             stime7 = dclock()
             call cem_quantum3_hamiltonian()
-!            print*,'after ham',nid,iqstep,ii
             stime4 = stime4 + dclock()-stime7
             stime7 = dclock()
             call quantum_lin_mpi_get()
-!            print*,'after get',nid,iqstep,ii
             stime5 = stime5 + dclock()-stime7
             stime7 = dclock()
             call rk_quantum3_ab(ii)
@@ -390,6 +387,11 @@ c$$$            if(nid.eq.0) write(6,*)'stime0:',stime0
 c$$$            call exitt()
 c$$$         endif
       enddo
+
+c$$$      print*,"Rho_r final"
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
       
       stime0 = dclock()-stime0
       if(nid.eq.0) write(6,*)'stime0:',stime0 
@@ -616,7 +618,6 @@ c!$omp parallel do collapse(1)
          rho_i(jj+c_offset,jj) = 0.0
       enddo
 
-
 c!$omp end parallel do
 !$acc end parallel loop
 
@@ -715,7 +716,11 @@ c!$omp parallel do collapse(1)
 !     The diagonal parts need special treatment
       do jj=1,nstate_np
          tmpfq= state_sums(jj+c_offset,jj)*pulse_omega_0
+<<<<<<< HEAD
      $        *rho(jj+c_offset,jj)
+=======
+     $           *rho(jj+c_offset,jj)
+>>>>>>> Started adding new state vector routines
          tmpcc = ci*2*tmp_i1(jj+c_offset,jj)
          drho(jj+c_offset,jj) = -ci*(tmpcc-tmpfq)
          resrho_r(jj+c_offset,jj) = real(drho(jj+c_offset,jj))
@@ -760,11 +765,11 @@ c!$omp end parallel do
 
       if(time.gt.quantum_gate_times(current_gate).and.
      $     (current_gate.le.number_of_gates)) then
-         print*,"Rho before"
-         do ii=1,nstate
-            write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
-         enddo
-
+c$$$         print*,"Rho before"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
+c$$$         enddo
+c$$$
 
          do jj=1,nstate_np
             do ii=1,nstate
@@ -786,11 +791,11 @@ c!$omp end parallel do
                tmpiv(j0) = imag(tmp_c1(ii,jj))
             enddo
          enddo
-         print*,"after mxm 1"
-         do ii=1,nstate
-            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
-         enddo
-
+c$$$         print*,"after mxm 1"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
+c$$$         enddo
+ 
 
 !     Do (Um*rho)^dagger
          ttmp= dclock()
@@ -814,10 +819,10 @@ c!$omp end parallel do
                endif
             enddo
          enddo        
-         print*,"after conj transpose"
-         do ii=1,nstate
-            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
-         enddo
+c$$$         print*,"after conj transpose"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (tmp_c1(ii,jj), jj=1,nstate)
+c$$$         enddo
 
 
 !     calculate Um*(Um*rho)^dag
@@ -833,10 +838,10 @@ c!$omp end parallel do
             enddo
          enddo
 
-         print*,"Rho after"
-         do ii=1,nstate
-            write(6,'(100g25.15)') (rho(ii,jj), jj=1,nstate)
-         enddo
+c$$$         print*,"Rho after"
+c$$$         do ii=1,nstate
+c$$$            write(6,'(100g25.15)') (rho(ii,jj), jj=1,nstate)
+c$$$         enddo
 
 !     Increment the current_gate
          current_gate = current_gate + 1
@@ -867,7 +872,12 @@ c-------------------------------------------------------------------
          tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
          if(ifPulse.eqv..true.) then
             tmp_c1(ii,jj) = tmp_c1(ii,jj)*
+<<<<<<< HEAD
      $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+=======
+     $           *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $           *(time-pulse_t_0))
+>>>>>>> Started adding new state vector routines
          endif
       enddo
       enddo
@@ -948,7 +958,13 @@ c--------------------------------------------------------------------
       do jj=1,nstate_np
       do ii=1,nstate
             tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
+<<<<<<< HEAD
      $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+=======
+            tmp_c1(ii,jj) = tmp_c1(ii,jj)
+     $           *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $           *(time-pulse_t_0))
+>>>>>>> Started adding new state vector routines
       enddo
       enddo
 !$acc end parallel loop
@@ -1006,7 +1022,7 @@ c-----------------------------------------------------------------------
       include 'mpif.h'
 #endif
       complex red_rho2(4,4),red_rho3(8,8),ci
-      complex red_rho(2**3,2**3)
+      complex red_rho(maxPartialTrace,maxPartialTrace)
       real*8  conc1,conc2,conc3,conc4,conc5,conc6
       real*8  popSymm1(4),popSymm2(4),popSymm3(4),popSymm4(4)
       real*8  popSymm5(4),popSymm6(4)
@@ -1044,14 +1060,27 @@ c     store result in red_rho
 !            j0 = j0_array(kk)!(jj-1)*nstate+ii
             j0 = (jj-1)*nstate+ii
             red_rho(ii,jj) = (tmprv(j0) + ci*tmpiv(j0))
+<<<<<<< HEAD
      $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
+=======
+            red_rho(ii,jj) = red_rho(ii,jj)
+     $           *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $           *(time-pulse_t_0))
+>>>>>>> Started adding new state vector routines
 !            kk = kk+1
          enddo
       enddo
 
-c$$$      call outmat(rho_r,nstate,nstate,'rho_r',nid)
-c$$$      call outmat(rho_i,nstate,nstate,'rho_i',nid)
-c$$$      if(nid.eq.0) call outmat(red_rho,8,8,'red_rho',nid)
+c$$$      print*,"Rho"
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$
+c$$$      print*,"red_rho"
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g25.15)') (real(red_rho(ii,jj)), jj=1,nstate)
+c$$$      enddo
+
 c$$$      call exitt()
       if((maxPartialTrace.eq.4).and.(nid.eq.0)) then
          call cem_quantum3_bipartite_concurrence(red_rho,conc1,popSymm1)
@@ -1127,6 +1156,8 @@ c-------------------------------------------------------------------
      $     popSymm)
 c-------------------------------------------------------------------
       implicit none
+      include 'SIZE'
+      include 'QUANT'
       complex    rho_conc(4,4),rho_svd2(4,4),rho_work2(8),rhoVL2(4,4)
       complex    spinFlip2(4,4),rhoFinal2(4,4),rhoVR2(4,4),rhoEval2(4)
       real       rho_workr2(2*4),bi_conc,rhoOrdering,popSymm(4)
