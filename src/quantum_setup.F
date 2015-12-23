@@ -10,6 +10,7 @@
       generated_gates  = 0
       numObservables   = 0
       newHandleNumber  = 1
+      newVecNumber     = -1
       quantN           = 1
       numberOfOps      = 0
       nTimeDep         = 0
@@ -17,7 +18,7 @@
       num_nl_lin_ops   = 0
       max_time_dep     = 2
       ifPulse          = .false.
-      rwa              = .true.
+      rwa              = .false.
       calc_concurrence = .false.
       pi               = 4.*ATAN(1.0)
 
@@ -59,6 +60,9 @@
       handle_m        = newHandleNumber
       newHandleNumber = newHandleNumber+1
 
+      handle_to_op(handle) = numberOfOps
+      handle_to_op(handle_t) = numberOfOps
+      handle_to_op(handle_m) = numberOfOps
       if(newHandleNumber.gt.maxOp) then
          if(nid.eq.0) then
             print*,'ERROR!'
@@ -91,6 +95,121 @@
       return
       end
 
+!**************************************************************
+      subroutine quantum_create_vec(qlevel,vec)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer qlevel
+      integer vec(qlevel)
+      integer ii,jj,kk
+
+      numberOfOps = numberOfOps+1      
+!     Be sure to initialize newHandlenumber,N
+
+      do ii=1,qlevel
+         vec(ii)      = newVecNumber
+         newVecNumber = newVecNumber-1
+      enddo
+
+      if(-newVecNumber.gt.maxOp/2) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'MAXOP TOO LOW FOR VEC'
+            print*,'Please recompile with a larger maxOp'
+         endif
+         call exitt()
+      endif
+
+      
+!     oldN is how many times we need to repeat this ops levels
+!     It represents the previous total number of levels
+
+      levels(numberOfOps) = qlevel
+
+      kk=1
+      do ii = 1,qlevel
+         do jj = 1,quantN
+            state(numberOfOps,kk) = ii-1
+            kk = kk + 1
+         enddo
+      enddo
+
+
+      do ii=1,qlevel
+         vec_to_op(-vec(ii)) = numberOfOps
+         vec_state(-vec(ii)) = ii-1
+      enddo
+
+      lin_tiling_N(numberOfOps) = quantN
+      quantN = quantN*qlevel
+
+      oldN(numberOfOps)   = quantN
+
+
+      return
+      end
+
+
+!*******************************************************************
+      subroutine quantum_combine_vec(handle1,handle2,handle_new)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer handle1,handle2,handle_new
+      integer nzmax,tilingNum,curState,value
+      integer jj,mat_offset,ii,maxLevel
+
+      nzmax   = maxN*10
+      handle_new = newHandleNumber
+      if(newHandleNumber.gt.maxOp) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'MAXOP TOO LOW'
+            print*,'Please recompile with a larger maxOp'
+         endif
+         call exitt()
+      endif
+      newHandleNumber = newHandleNumber+1
+
+      
+      ii = vec_to_op(-handle1)
+      maxLevel     = levels(ii)
+      tilingNum = oldN(vec_to_op(-handle1))
+      handle_to_op(handle_new) = -ii
+      vec_state2(handle_new) = vec_state(-handle1)
+      do jj=1,nstate
+         curState = state(vec_to_op(-handle1),
+     $        mod(jj-1,tilingNum)+1)
+         !Only if we are on the requested vector location should we insert a value
+
+         if(vec_state(-handle1).eq.curState) then 
+            value = 1
+         else
+            value = 0
+         endif
+         
+         mat_offset = oldN(ii)/maxLevel*(vec_state(-handle2) - 
+     $        vec_state(-handle1))
+         
+         op_csr_a(jj,handle_new)  = value
+         op_csr_ia(jj,handle_new) = jj
+         if(jj+mat_offset.gt.0) then
+            op_csr_ja(jj,handle_new) = min((jj+mat_offset),nstate)
+         else
+            op_csr_ja(jj,handle_new) = min(jj,nstate)
+         endif
+!         print*,mat_offset,value,jj
+!         print*,vec_state(-handle2),
+!     $        vec_state(-handle1)
+      enddo
+
+         
+
+      return
+      end
 
 !*******************************************************************
       subroutine quantum_finalize_op_csr()
@@ -139,6 +258,7 @@ c      print*,'after check two',nid
          enddo
       enddo
 
+
       do ii=1,numberOfOps
          maxLevel     = levels(ii)
          tilingNumber = oldN(ii)
@@ -147,14 +267,14 @@ c      print*,'after check two',nid
          do jj=1,nstate
             curState = state(ii,mod(jj-1,tilingNumber)+1)
             value = sqrt(real(curState+1))
-            
+               
 !     op_num+1,op_num+2, refer to the different basic operators
 !     op_num+1 = op, op_num+2 = op^dag, op_num+3 = op^dag*op
-            
+               
             op_csr_a(jj,op_num+3) = curState
             op_csr_ja(jj,op_num+3) = jj
             op_csr_ia(jj,op_num+3) = jj
-
+            
             if(curState.lt.maxLevel-1) then
                mat_offset = oldN(ii)/maxLevel
                mat_bound  = jj+mat_offset
@@ -166,7 +286,7 @@ c      print*,'after check two',nid
                op_csr_ia(jj,op_num+1) = jj
                op_csr_ja(jj,op_num+1) = jj
             endif
-         enddo
+         enddo 
          op_csr_ia(nstate+1,op_num+3) = nstate+1
          op_csr_ia(nstate+1,op_num+1) = nstate+1
 !     Get transpose of op_num+1 (to get op^dag)
@@ -174,8 +294,10 @@ c      print*,'after check two',nid
      $        op_csr_ja(1,op_num+1),op_csr_ia(1,op_num+1),
      $        op_csr_a(1,op_num+2),
      $        op_csr_ja(1,op_num+2),op_csr_ia(1,op_num+2))
-
+         
       enddo
+
+      
 
       eV       = 27.21140                ! energy Eh  
       dEh  = (Emax-Emin)/(nEh+1)     
@@ -406,6 +528,25 @@ c$$$       enddo
 
       end
 
+!**********************************************************************
+      subroutine quantum_print_csr(handle)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer handle,ii,jj,ierr
+      real    op(nstate,nstate)
+      if(nid.eq.0) then
+         call csrdns(nstate,nstate,op_csr_a(1,handle),
+     $        op_csr_ja(1,handle),op_csr_ia(1,handle),op,nstate,ierr)
+         do ii=1,nstate
+            write(6,'(100g15.5)') (op(ii,jj), jj=1,nstate)
+         enddo
+      endif
+
+      return
+      end
+      
 
 !**********************************************************************
       subroutine quantum_ham_finalize_csr()
@@ -413,7 +554,7 @@ c$$$       enddo
       include 'SIZE'
       include 'QUANT'
       integer ii,jj,kk,IERR,nzmax
-      real op(32,32)
+
       ham_nnz = nstate2
       !Add together independent and dependent parts to get indices
       !0 means do the add such that ham_i and ham_d are promoted to
@@ -447,7 +588,8 @@ c$$$       enddo
       return
       end
 
-
+!     Should be handle1 = left term of a rho a^\dagger, handle2 = part with rho, individually,
+!     such as a^\dagger a \rho 
 !************************************************************
       subroutine quantum_lin_add(handle1,handle2,scalar)
       implicit none
@@ -457,7 +599,7 @@ c$$$       enddo
       integer jj,ii,kk,handle1,handle2,tilingNum,state1,state2
       integer ll,mm,maxState,target_core,iOp,kkOld
       integer*8 target_disp
-      integer tilingNum2
+      integer tilingNum2,op_num
       real scalar
 
       !be sure to set this initially!
@@ -471,14 +613,210 @@ c$$$       enddo
          call exitt()
       endif
       iOp = numberOfLinOps
+
       !FIXME: handle2/3 is dangerous - put a check or think of a better way!
-      tilingNum = oldN(handle2/3)
+      op_num = handle_to_op(handle2)
+
+      tilingNum = oldN(abs(op_num))
+
+      if(tilingNum.eq.0) then !handle2 doesn't reference a base operator - will crash!
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'HANDLE2 IS NOT A BASE NUMBER OPERATOR'
+         endif
+         call exitt()
+      endif
+
       do jj=1,nstate_np
-         state1 = state(handle2/3,mod(jj+c_offset-1,tilingNum)+1)
+         state1 = state(abs(op_num),
+     $        mod(jj+c_offset-1,tilingNum)+1)
+
+         if(op_num.lt.0) then   !Fix to allow vec number like operators
+            if(state1.eq.vec_state2(handle2)) then
+               state1 = 1
+            else
+               state1 = 0
+            endif
+         endif
+
          do ii=1,nstate
-            state2 = state(handle2/3,mod(ii-1,tilingNum)+1)
+            state2 = state(abs(op_num),mod(ii-1,tilingNum)+1)
+
+            if(op_num.lt.0) then !Fix to allow vec number like operators
+               if(state2.eq.vec_state2(handle2)) then
+                  state2 = 1
+               else
+                  state2 = 0
+               endif
+            endif
+            
             lin_comb_op(ii,jj) = lin_comb_op(ii,jj) + 
      $           scalar*(state1+state2)
+
+
+            if(handle1.eq.handle2) then !FIXME handle1.eq.handle2 is dangerous
+               lin_comb_op(ii,jj) = lin_comb_op(ii,jj) -
+     $              2*scalar*state1*state2
+            endif
+         enddo
+      enddo
+
+      if(handle1.ne.handle2) then
+         num_nl_lin_ops = num_nl_lin_ops+1
+         iOp            = num_nl_lin_ops
+         if(num_nl_lin_ops.gt.maxOp/4) then
+            if(nid.eq.0) then
+               print*,'ERROR!'
+               print*,'TOO MANY LINOPS FOR THIS MAXOP'
+            endif
+            call exitt()
+         endif
+
+         op_num = handle_to_op(handle1)
+!     lin_get setup
+         if(op_num.gt.0) then
+            maxState = levels(abs(op_num))
+         else
+            maxState = 1
+         endif
+
+         tilingNum = lin_tiling_N(abs(op_num))
+         tilingNum2 = oldN(abs(op_num))
+         kk = 0
+         kkOld = 0
+         ll = 0
+
+
+         lin_offset(iOp) = tilingNum
+         do jj=1,nstate_np
+            target_core = (jj+c_offset+tilingNum-1)*np/nstate
+            state1 = state(abs(op_num),
+     $           mod(jj+c_offset-1,tilingNum2)+1)
+
+            if(op_num.lt.0) then !Fix to allow vec number like operators
+               if(state1.eq.vec_state2(handle1)) then
+                  state1 = 1
+               else
+                  state1 = 0
+               endif
+            endif
+
+            if(target_core.ne.nid.and.state1+1.lt.maxState.and.
+     $           target_core.lt.np.and.jj+c_offset+tilingNum.le.nstate) 
+     $           then
+               kk = kk + 1
+               target_disp = (jj+c_offset+tilingNum-target_core*nstate
+     $              /np-1)*maxN
+               lin_target(kk,iOp) = target_core
+               lin_disp(kk,iOp)   = target_disp
+            endif
+
+            mm = 0
+            do ii=1,nstate
+               state2 = state(op_num,
+     $              mod(ii-1,tilingNum2)+1)
+
+               if(op_num.lt.0) then !Fix to allow vec number like operators
+                  if(state2.eq.vec_state2(handle2)) then
+                     state2 = 1
+                  else
+                     state2 = 0
+                  endif
+               endif
+
+               if(state1+1.lt.maxState.and.state2+1.lt.
+     $              maxState.and.jj+c_offset+tilingNum.le.nstate.and.
+     $              ii+tilingNum.le.nstate) then
+                  if(target_core.eq.nid) then
+                     ll = ll+1
+                     lin_l_index(1,ll,iOp) = ii !i0
+                     lin_l_index(2,ll,iOp) = jj !j0
+                     lin_l_a(ll,iOp) = -2*scalar*sqrt(real((state1+1)*
+     $                    (state2+1)))
+                  else
+                     mm = mm+1
+                     lin_nl_index(1,mm,kk,iOp) = ii !i0
+                     lin_nl_index(2,mm,kk,iOp) = jj !j0
+                     lin_nl_a(mm,kk,iOp) = -2*scalar*sqrt(real(
+     $                    (state1+1)*(state2+1)))
+                  endif
+               endif
+            enddo
+            if(kk.ne.kkOld) lin_nl_length(kk,iOp) = mm
+         enddo
+         lin_l_length(iOp)      = ll
+         lin_nl_col_length(iOp) = kk
+      endif
+
+      end
+
+
+!************************************************************
+!     Adds a part to the lindblad operator using the transpose of the 2nd handle
+!     Assumes 2nd argument is number operator!
+!     Should be handle1 = left term of a rho a^\dagger, handle2 = part with rho, individually,
+!     such as a^\dagger a \rho 
+!************************************************************
+      subroutine quantum_lin_add_trans(handle1,handle2,scalar)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer jj,ii,kk,handle1,handle2,tilingNum,state1,state2
+      integer ll,mm,maxState,target_core,iOp,kkOld
+      integer*8 target_disp
+      integer tilingNum2,op_num
+      real scalar
+
+      !be sure to set this initially!
+
+      numberOfLinOps = numberOfLinOps + 1 
+      if(numberOfLinOps.gt.maxOp/4) then
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'TOO MANY LINOPS FOR THIS MAXOP'
+         endif
+         call exitt()
+      endif
+      iOp = numberOfLinOps
+      !FIXME: op_num is dangerous - put a check or think of a better way!
+      op_num = handle_to_op(handle2)
+
+      tilingNum = oldN(abs(op_num))
+      if(tilingNum.eq.0) then !handle2 doesn't reference a base operator - will crash!
+         if(nid.eq.0) then
+            print*,'ERROR!'
+            print*,'HANDLE2 IS NOT A BASE NUMBER OPERATOR'
+         endif
+         call exitt()
+      endif
+      do jj=1,nstate_np
+         state1 = state(abs(op_num),
+     $        mod(jj+c_offset-1,tilingNum)+1)
+
+         if(op_num.lt.0) then   !Fix to allow vec number like operators
+            if(state1.eq.vec_state2(handle2)) then
+               state1 = 1
+            else
+               state1 = 0
+            endif
+         endif
+
+         do ii=1,nstate
+            state2 = state(abs(op_num),mod(ii-1,tilingNum)+1)
+
+            if(op_num.lt.0) then !Fix to allow vec number like operators
+               if(state2.eq.vec_state2(handle2)) then
+                  state2 = 1
+               else
+                  state2 = 0
+               endif
+            endif
+
+            lin_comb_op(ii,jj) = lin_comb_op(ii,jj) + 
+     $           scalar*((state1*(state1+1))**(0.5)+
+     $           (state2*(state2+1))**(0.5))
+
             if(handle1.eq.handle2) then !FIXME handle1.eq.handle2 is dangerous
                lin_comb_op(ii,jj) = lin_comb_op(ii,jj) -
      $              2*scalar*state1*state2
@@ -499,9 +837,16 @@ c$$$       enddo
          endif
 
 !     lin_get setup
-         maxState = levels(handle2/3)
-         tilingNum = lin_tiling_N(handle2/3)
-         tilingNum2 = oldN(handle2/3)
+         op_num = handle_to_op(handle1)
+         if(op_num.gt.0) then
+            maxState = levels(abs(op_num))
+         else
+            maxState = 1
+         endif
+
+         tilingNum = lin_tiling_N(abs(op_num))
+         tilingNum2 = oldN(abs(op_num))
+
          kk = 0
          kkOld = 0
          ll = 0
@@ -510,7 +855,18 @@ c$$$       enddo
          lin_offset(iOp) = tilingNum
          do jj=1,nstate_np
             target_core = (jj+c_offset+tilingNum-1)*np/nstate
-            state1 = state(handle2/3,mod(jj+c_offset-1,tilingNum2)+1)
+            state1 = state(abs(op_num),
+     $           mod(jj+c_offset-1,tilingNum2)+1)
+
+            if(op_num.lt.0) then !Fix to allow vec number like operators
+               if(state1.eq.vec_state2(handle1)) then
+                  state1 = 1
+               else
+                  state1 = 0
+               endif
+            endif
+
+
             if(target_core.ne.nid.and.state1+1.lt.maxState.and.
      $           target_core.lt.np.and.jj+c_offset+tilingNum.le.nstate) 
      $           then
@@ -523,7 +879,17 @@ c$$$       enddo
 
             mm = 0
             do ii=1,nstate
-               state2 = state(handle2/3,mod(ii-1,tilingNum2)+1)
+               state2 = state(op_num,
+     $              mod(ii-1,tilingNum2)+1)
+
+               if(op_num.lt.0) then !Fix to allow vec number like operators
+                  if(state2.eq.vec_state2(handle2)) then
+                     state2 = 1
+                  else
+                     state2 = 0
+                  endif
+               endif
+
                if(state1+1.lt.maxState.and.state2+1.lt.
      $              maxState.and.jj+c_offset+tilingNum.le.nstate.and.
      $              ii+tilingNum.le.nstate) then
@@ -763,30 +1129,58 @@ c$$$       enddo
                if(otherSame.eqv..true.) then
                   control_ii = binary_rep(control,ii,n)
                   target_ii  = binary_rep(target,ii,n)
-                  if((control_ii.eq.0).and.(control_jj.eq.0).and.
-     $                 (target_ii.eq.0).and.(target_jj.eq.0)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
-                  else if((control_ii.eq.0).and.(control_jj.eq.0).and.
-     $                    (target_ii.eq.1).and.(target_jj.eq.1)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
-                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
-     $                    (target_ii.eq.1).and.(target_jj.eq.0)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
-                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
-     $                    (target_ii.eq.0).and.(target_jj.eq.1)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
+                  if(control.gt.target) then
+                     if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                    (target_ii.eq.0).and.(target_jj.eq.0)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                       (target_ii.eq.1).and.(target_jj.eq.1)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.1).and.(target_jj.eq.0)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.0).and.(target_jj.eq.1)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     endif
+                  else
+                     if((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                    (target_ii.eq.0).and.(target_jj.eq.0)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.0).and.(target_jj.eq.0)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.0).and.(target_jj.eq.1)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.1).and.(target_jj.eq.0)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     endif
                   endif
                endif
             enddo
@@ -801,6 +1195,7 @@ c$$$       enddo
          quantum_gate(number_of_gates) = generated_gates
 
          cnot_table(target,control) = generated_gates
+
 c$$$         do ii=1,5*nstate
 c$$$            tmprv(ii) = real(quantum_gate_csr_a(ii,generated_gates))
 c$$$         enddo
@@ -813,7 +1208,7 @@ c$$$
 c$$$         do ii=1,2**n
 c$$$            write(11,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
 c$$$         enddo
-c$$$
+
 
       else
          quantum_gate(number_of_gates) = 
@@ -828,7 +1223,7 @@ c$$$
 !* Adds a CRk gate to the quantum gate hamiltonian
 !*
 !* inputs:
-!*      control - identifies the control qubit for the CNOT gate
+!*      control - identifies the control qubit
 !*      target  - identifies the target of the qubit
 !*      totalQubits - total number of qubits in the system
 !*      k           - Rk = 1 0
@@ -937,31 +1332,59 @@ c$$$
                if(otherSame.eqv..true.) then
                   control_ii = binary_rep(control,ii,n)
                   target_ii  = binary_rep(target,ii,n)
-                  if((control_ii.eq.0).and.(control_jj.eq.0).and.
-     $                 (target_ii.eq.0).and.(target_jj.eq.0)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
-                  else if((control_ii.eq.0).and.(control_jj.eq.0).and.
-     $                    (target_ii.eq.1).and.(target_jj.eq.1)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
-                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
+!                  if(control.gt.target) then
+                     if((control_ii.eq.0).and.(control_jj.eq.0).and.
      $                    (target_ii.eq.0).and.(target_jj.eq.0)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = 1.0
-                  else if((control_ii.eq.1).and.(control_jj.eq.1).and.
-     $                    (target_ii.eq.1).and.(target_jj.eq.1)) then
-                     kk = kk + 1
-                     quantum_gate_coo_ia(kk) = ii
-                     quantum_gate_coo_ja(kk) = jj
-                     quantum_gate_coo_a(kk) = exp(ci*2*pi/(2**k))
-                  endif
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.0).and.(control_jj.eq.0).and.
+     $                       (target_ii.eq.1).and.(target_jj.eq.1)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.0).and.(target_jj.eq.0)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = 1.0
+                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+     $                       (target_ii.eq.1).and.(target_jj.eq.1)) then
+                        kk = kk + 1
+                        quantum_gate_coo_ia(kk) = ii
+                        quantum_gate_coo_ja(kk) = jj
+                        quantum_gate_coo_a(kk) = exp(ci*2*pi/(2**k))
+                     endif
+c$$$                  else
+c$$$                     if((control_ii.eq.0).and.(control_jj.eq.0).and.
+c$$$     $                    (target_ii.eq.0).and.(target_jj.eq.0)) then
+c$$$                        kk = kk + 1
+c$$$                        quantum_gate_coo_ia(kk) = ii
+c$$$                        quantum_gate_coo_ja(kk) = jj
+c$$$                        quantum_gate_coo_a(kk) = exp(ci*2*pi/(2**k))
+c$$$                     elseif((control_ii.eq.0).and.(control_jj.eq.0).and.
+c$$$     $                       (target_ii.eq.1).and.(target_jj.eq.1)) then
+c$$$                        kk = kk + 1
+c$$$                        quantum_gate_coo_ia(kk) = ii
+c$$$                        quantum_gate_coo_ja(kk) = jj
+c$$$                        quantum_gate_coo_a(kk) = 1.0
+c$$$                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+c$$$     $                       (target_ii.eq.0).and.(target_jj.eq.0)) then
+c$$$                        kk = kk + 1
+c$$$                        quantum_gate_coo_ia(kk) = ii
+c$$$                        quantum_gate_coo_ja(kk) = jj
+c$$$                        quantum_gate_coo_a(kk) = 1.0
+c$$$                     elseif((control_ii.eq.1).and.(control_jj.eq.1).and.
+c$$$     $                       (target_ii.eq.1).and.(target_jj.eq.1)) then
+c$$$                        kk = kk + 1
+c$$$                        quantum_gate_coo_ia(kk) = ii
+c$$$                        quantum_gate_coo_ja(kk) = jj
+c$$$                        quantum_gate_coo_a(kk) = 1.0
+c$$$                     endif
+c$$$                 endif
                endif
             enddo
          enddo
@@ -975,16 +1398,16 @@ c$$$
          quantum_gate(number_of_gates) = generated_gates
          crk_table(target,control,k)   = generated_gates
 c$$$         do ii=1,5*nstate
-c$$$            tmprv(ii) = real(quantum_gate_csr_a(ii,generated_gates))
+c$$$            tmprv(ii) = imag(quantum_gate_csr_a(ii,generated_gates))
 c$$$         enddo
 c$$$
 c$$$!debug statements
 c$$$         call csrdns(2**n,2**n,tmprv,
 c$$$     $        quantum_gate_csr_ja(1,generated_gates),
 c$$$     $        quantum_gate_csr_ia(1,generated_gates),dns,2**n,ierr)
-c$$$         
+c$$$
 c$$$         do ii=1,2**n
-c$$$            write(11,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
+c$$$            write(6,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
 c$$$         enddo
 c$$$
 
@@ -1031,7 +1454,7 @@ c$$$
       include 'QUANT'
 
       integer qubit,totalQubits,gateIdentifier,gate,nzmax
-      real    gatetime,dns(2**totalQubits,2**totalQubits)
+      real    gatetime,dns(2,2)
       integer n,ierr,ii,jj,m
       complex ci,um(2,2)
       n = totalQubits
@@ -1061,6 +1484,8 @@ c$$$
 
       !Input checking
       if(number_of_gates.gt.0) then
+         print*,'gatetime: ',gatetime,'quantum_gate_times(n)',
+     $        quantum_gate_times(number_of_gates)
          if(gatetime.lt.quantum_gate_times(number_of_gates)) then
             if(nid.eq.0) then
                print*,'ERROR!'
@@ -1131,11 +1556,12 @@ c$$$
          quantum_gate(number_of_gates) = 
      $        gates_table(gateIdentifier,m)
       endif
-
+      
+c$$$      gate = generated_gates
 c$$$      do ii=1,5*nstate
 c$$$         tmprv(ii) = real(quantum_gate_csr_a(ii,gate))
 c$$$      enddo
-
+c$$$
 c$$$      !debug statements
 c$$$      call csrdns(2**n,2**n,tmprv,
 c$$$     $     quantum_gate_csr_ja(1,gate),
@@ -1146,7 +1572,7 @@ c$$$         write(6,'(100g25.15)') (dns(ii,jj), jj=1,2**n)
 c$$$      enddo
 
 
-
+      return
       end
 
 !********************************************************************
@@ -1184,7 +1610,6 @@ c$$$      enddo
       ! block = um cross 1 ... cross 1
       ! This happens n-m times, where n is the total number of qubits
       ! The size of 1 is defined by the levels of all operators
-
 
       i_coo_a = 0
       ! Construct all of the blocks
@@ -1250,6 +1675,10 @@ c$$$      enddo
      $     quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
      $     quantum_gate_csr_ja(1,generated_gates),
      $     quantum_gate_csr_ia(1,generated_gates))
+
+
+
+      return
 
       end
 
