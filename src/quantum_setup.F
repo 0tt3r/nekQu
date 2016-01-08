@@ -441,7 +441,8 @@ c$$$       enddo
       if(numberOfLinOps.gt.maxOp/4) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'TOO MANY LINOPS FOR THIS MAXOP'
+            print*,'TOO MANY LINOPS',numberOfLinOps,
+     $           ' FOR THIS MAXOP/4', MAXOP/4
          endif
          call exitt()
       endif
@@ -524,6 +525,7 @@ c$$$       enddo
       endif
 
       end
+
 
 !**************************************************************
       subroutine quantum_lin_mpi_get()

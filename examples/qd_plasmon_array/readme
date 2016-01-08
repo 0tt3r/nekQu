@@ -1,0 +1,14 @@
+
+User defined routines are stored in the .usr file.
+quantum_dot.usr is an example file, doing 3 QDs and one plasmon.
+Making a new system is as simple as making a new .usr file, and specifying
+the .usr file in the compilation, as seen below. For example, one could make
+a new file, 2plasmons.usr, and put the other system in there (within the same
+folder).
+
+
+To compile: ../../bin/makenekQ -a linux-gnu-pgi quantum_dot.usr
+To run:     ../../bin/nek sample 1
+            sample is the name of the (unused) input file. It is not used, but needs to be there.
+            1 is the number of cores. Currently, more than one core is unstable
+

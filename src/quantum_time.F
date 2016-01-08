@@ -50,7 +50,7 @@ c$$$      rho_r(2,2) = 0.5
 c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
-      if(nid.eq.0) rho_r(1,1) = 1
+      if(nid.eq.0) rho_r(2,2) = 1
 
 c!$acc end parallel
 
@@ -123,7 +123,7 @@ ccc This doesn't need to be done on the GPU, because it is for host to communica
 
 
 !     Skip concurrence for now
-      do ii=1,numsp
+      do ii=1,nstate/ltonq
          do jj=1,ltonq
             do kk=1,ltonq
                gloJ = ltonq*ii-(ltonq-jj)
@@ -285,10 +285,17 @@ c---------------------------------------------------------------------
       endif
       if(nid.eq.0) then
 c     Write file headers 
-         write(12,*)'#Time,sp_mu,qd_mu(1),qd_mu(2),
-     $mu_tot,pulse,popSp'
+         write(13,*)'#Time,Observables'
+         write(12,*)'#Time,Pulse,Populations'
          if(calc_concurrence.eqv..true.) then
-            write(13,*)'#Time,3:2,3:1,2:1'
+            if(ltonq.eq.8) then
+               write(14,*)'#Time,3:2,3:1,2:1'
+               write(15,*)'#Time,3:2 - popS,popA,popS1,
+     $              popA1, 3:1 - , 2:1'
+            else if(ltonq.eq.4) then
+               write(14,*)'#Time,1:2'
+               write(15,*)'#Time,popS,popA,popS1,popA1'
+            endif
          endif
       endif
 

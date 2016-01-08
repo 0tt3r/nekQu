@@ -2,14 +2,14 @@
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
      $                , newHandleNumber,quantN,numberOfOps,nTimeDep
      $                , numberOfLinOps,c_offset,max_time_dep
-     $                , lin_comb_nnz,nstate2,ltonq,numsp,debug
+     $                , lin_comb_nnz,nstate2,ltonq,debug
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
      $                , nstate_np,iiqstep,obsPrintSkip
        integer         iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
      $                , newHandleNumber,quantN,numberOfOps,nTimeDep
      $                , numberOfLinOps,c_offset,max_time_dep
-     $                , lin_comb_nnz,nstate2,ltonq,numsp,debug
+     $                , lin_comb_nnz,nstate2,ltonq,debug
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
      $                , nstate_np,iiqstep,obsPrintSkip
 
