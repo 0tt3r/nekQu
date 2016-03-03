@@ -50,9 +50,20 @@ c$$$      rho_r(2,2) = 0.5
 c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
-!FIXME: Move density matrix initialization to user routine!
-      if(nid.eq.0) rho_r(2,2) = 1
 
+!FIXME: Move density matrix initialization to user routine!
+      do ii=1,nstate_np
+         if(ii+c_offset.eq.levels(1)) then
+            rho_r(ii+c_offset,ii) = 1.0/3.0
+         endif
+         if(ii+c_offset.eq.2*levels(1)) then
+            rho_r(ii+c_offset,ii) = 1.0/3.0
+         endif
+         if(ii+c_offset.eq.3*levels(1)) then
+            rho_r(ii+c_offset,ii) = 1.0/3.0
+         endif
+      enddo
+!      rho_r(nstate,nstate) = 1.0
 c!$acc end parallel
 
 
@@ -75,8 +86,8 @@ c!$acc update device(resrho_i)
       qrtime4= 0.0
 
       dt           = timemax/(nqstep)
-      printdt      = dt
-      obsPrintSkip =1 
+      printdt      = 1*dt
+      obsPrintSkip = 1000
       time    = 0
       timeOld = -1
 
@@ -124,26 +135,27 @@ ccc This doesn't need to be done on the GPU, because it is for host to communica
 
 
 !     Skip concurrence for now
-      do ii=1,nstate/ltonq
-         do jj=1,ltonq
-            do kk=1,ltonq
-               gloJ = ltonq*ii-(ltonq-jj)
-               gloI = ltonq*ii-(ltonq-kk)
+      if(calc_concurrence.eqv..true.) then
+         do ii=1,nstate/ltonq
+            do jj=1,ltonq
+               do kk=1,ltonq
+                  gloJ = ltonq*ii-(ltonq-jj)
+                  gloI = ltonq*ii-(ltonq-kk)
 
-               if((gloJ.gt.nid*nstate_np).and.
-     $              (gloJ.le.(nid+1)*nstate_np)) then
-                  locJ = gloJ - c_offset
-                  glo_num_q_concV(gloI+(locJ-1)*nstate) =
-     $                 kk+(jj-1)*maxPartialTrace
-               endif
+                  if((gloJ.gt.nid*nstate_np).and.
+     $                 (gloJ.le.(nid+1)*nstate_np)) then
+                     locJ = gloJ - c_offset
+                     glo_num_q_concV(gloI+(locJ-1)*nstate) =
+     $                    kk+(jj-1)*maxPartialTrace
+                  endif
 
-c$$$               red_rho(kk,jj) = red_rho(kk,jj) + 
-c$$$     $              rho(ltonq*ii-(ltonq-kk),ltonq*ii-(ltonq-jj))
+c$$$  red_rho(kk,jj) = red_rho(kk,jj) + 
+c$$$  $              rho(ltonq*ii-(ltonq-kk),ltonq*ii-(ltonq-jj))
 
+               enddo
             enddo
          enddo
-      enddo
-      
+      endif
 c$$$      open(unit=123,file='matrix')
 c$$$      do ii=1,nstate*nstate
 c$$$         gloJ = ii/nstate
@@ -154,13 +166,17 @@ c$$$      call outmat(k_rho_r,nstate,nstate,'glo_num ',nid)
 #ifdef MPI
       call gs_setup(gs_handle_q_H,glo_num_q_Hv,nstate_p,
      $     MPI_COMM_WORLD,np)
-      call gs_setup(gs_handle_q_conc,glo_num_q_concV,nstate_p,
-     $     MPI_COMM_WORLD,np)
+      if(calc_concurrence.eqv..true.) then
+         call gs_setup(gs_handle_q_conc,glo_num_q_concV,nstate_p,
+     $        MPI_COMM_WORLD,np)
+      endif
 #else
       call gs_setup(gs_handle_q_H,glo_num_q_Hv,nstate_p,
      $     nekcomm,np)
-      call gs_setup(gs_handle_q_conc,glo_num_q_concV,nstate_p,
-     $     nekcomm,np)
+      if(calc_concurrence.eqv..true.) then
+         call gs_setup(gs_handle_q_conc,glo_num_q_concV,nstate_p,
+     $        nekcomm,np)
+      endif
 #endif
       return
       end
@@ -242,7 +258,7 @@ c-----------------------------------------------------------------------
       include 'RK5'
       include 'mpif.h'
       real*8     ca,cb
-      integer  ii,jl,kl
+      integer  ii,jl,kl,jj
 
       ca = rk4a(ii)
       cb = rk4b(ii)
@@ -256,40 +272,287 @@ c$$$            rho_i(kl,jl)   = rho_i(kl,jl) + cb*k_rho_i(kl,jl)
 c$$$         enddo
 c$$$      enddo
 
+
+c$$$      print*,'pre'
+c$$$      print*,'rho_r'
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (resrho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$      print*,'rho_i'
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (resrho_i(ii,jj), jj=1,nstate)
+c$$$      enddo
+
+
       call rk4_quantum3_upd(rho_r,k_rho_r,resrho_r,cb,ca)
       call rk4_quantum3_upd(rho_i,k_rho_i,resrho_i,cb,ca)
+c$$$      print*,'post'
+c$$$      print*,'rho_r'
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$      print*,'rho_i'
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (rho_i(ii,jj), jj=1,nstate)
+c$$$      enddo
+
+      return
+      end
+
+c--------------------------------------------------------------------- 
+      subroutine cem_quantum3_propagation_exp
+c--------------------------------------------------------------------- 
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer  iEh, ii
+      real*8   dclock
+      real*8    stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
+      complex  ci,en_t(nEh),obs_freq(maxOp,nEh)
+
+   
+      ci=(0.0,1.0)
+      stime0= 0.0          
+      stime1= 0.0          
+      stime2= 0.0          
+      stime3= 0.0          
+      stime4= 0.0      
+      stime5= 0.0      
+      stime6= 0.0      
+      stime7= 0.0      
+      stime0= dclock()     
+      stime1= dclock()
+
+      call cem_quantum3_propagation_init(obs_freq,en_t)
+
+      iqstep=1
+      iiqstep = 1
+      do while(time.lt.timemax)
+         stime1= dclock()
+         call cem_quantum3_exp
+         time= time+dt
+
+         if(useGates.eqv..true.) then
+            call quantum_apply_gates()
+         endif
+
+         call cem_quantum3_observables(obs_freq,en_t)
+         if(time.gt.timeOld) then
+            call cem_quantum3_pop()
+            timeOld = timeOld+printdt
+            iiqstep = iiqstep + 1
+            stime7= dclock()-stime7
+         endif
+         stime1= dclock()-stime1
+         qrtime1= qrtime1+stime1
+         qrtime2= stime4
+         qrtime3= stime5
+!         qrtime4= stime7
+         call userchk
+         iqstep=iqstep+1
+
+         stime2= dclock()-stime2
+      enddo
+      stime1= dclock()-stime1
+
+      stime0 = dclock()-stime0
+      if(nid.eq.0) write(6,*)'stime0:',stime0 
+
+      call cem_quantum3_propagation_finalize(en_t,obs_freq)
+
+      return
+      end
+
+c--------------------------------------------------------------------- 
+      subroutine cem_quantum3_exp
+c--------------------------------------------------------------------- 
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      integer  icalld
+      save     icalld
+      data     icalld/0/
+      real*8     glsc2,beta,tmp,s1
+      integer  m,info,i,j,j0
+      integer  n2
+      save     n2
+
+
+      qmarnol= larnol 
+      m      = 5 !qmarnol
+
+      if (icalld.eq.0) then
+
+         n2     = 2*nstate2 
+         call rzero(qu ,n2)
+         call rzero(qv ,n2*m)
+         call rzero(qh ,m*m)
+         call rzero(qw ,m)
+         call rzero(qws,2*m*(m+2))
+         icalld = 1
+
+      endif
+
+      !consider rolling below into quantum3_arnoldi_vec
+      do j=1,nstate_np
+         do i=1,nstate
+            j0 = (j-1)*nstate+i
+            tmprv(j0)        = rho_r(i,j)
+            tmpiv(j0)        = rho_i(i,j)
+         enddo
+      enddo
+
+      beta = glsc2(tmprv,tmprv,nstate2) + glsc2(tmpiv,tmpiv,nstate2)
+      s1   = beta
+      beta= sqrt (beta)
+
+      call quantum3_arnoldi_vec (qv,qh,n2,m,s1)
+
+      call copy_r2z   (qzh,qh,m*m)
+      
+      call zgeev      ('N','V',m,qzh,m,qeval,qzri,m,qzr,m,qawork,
+     $                  2*m,qrwork,info)
+
+      call copy_z2z   (qzri,qzr,m*m)
+
+      call zgetrf     (m,m,qzri,m,iqpiv,info)        !vri= LU factorization                
+
+      call zgetri     (m,qzri,m,iqpiv,qawork,m,info) !vri= X^(-1)
+
+      call z_exp      (qeval,dt,m)                   !eval=exp(dt*eval)
+      call z_rowscale (qzri,qeval,m)                 !vri =eval*X^(-1); 
+      call c_mxm      (qzr,m,qzri,m,qzh,m)           !zh =X*vri  
+
+      call copy_z2r   (qw,qzh(1,1),m)                 !zh(i,1) (i=1:m)
+      call mxm        (qv,n2,qw,m,qu,1)
+   
+      do j=1,nstate_np
+         do i=1,nstate
+            j0 = (j-1)*nstate+i
+            rho_r(i,j) = beta*qu(0*nstate2+j0)
+            rho_i(i,j) = beta*qu(1*nstate2+j0)
+         enddo
+      enddo
+
+      return
+      end
+
+c--------------------------------------------------------------------- 
+      subroutine quantum3_arnoldi_vec(v,h,n,m,s1)
+c--------------------------------------------------------------------- 
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      
+      integer  i,j,m,n
+      real*8     v(n,m)
+      real*8     h(m,m)
+      real*8     eps, s1, si, glsc2, cnt
+
+      eps = 1.e-13
+
+      si = 1./sqrt(s1)                     ! should add a check and a comment here
+
+      do i=1,nstate2
+         v(i,1) = tmprv(i)*si
+         v(nstate2+i,1) = tmpiv(i)*si
+      enddo
+
+!     We split the final iteration out so that we can save a few flops
+!     but mostly so we can have only one array of size (n,m) instead of
+!     needing an array of size (n,m+1)
+      do j=1,m-1
+         call quantum3_mult (v(1,j+1),v(1,j),n)
+         do i=1,j
+            h(i,j) = glsc2 (v(1,j+1),v(1,i),n)
+            cnt    =       -h(i,j  )
+            call add2s2    (v(1,j+1),v(1,i),cnt,n)
+         enddo
+         s1 = glsc2(v(1,j+1),v(1,j+1),n)
+         s1 = sqrt(s1)
+         h(j+1,j) = s1
+         si = 1.0/s1
+         do i=1,n
+            v(i,j+1) = si*v(i,j+1)
+         enddo
+      enddo
+
+!     Final iteration: j=m
+      call quantum3_mult (qu,v(1,m),n)
+      do i=1,m
+         h(i,m) = glsc2 (qu,v(1,i),n)
+         cnt    =       -h(i,m  )
+         call add2s2    (qu,v(1,i),cnt,n)
+      enddo
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine quantum3_mult(w,v,n2)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT' 
+      integer  n2,i,j,j0
+      real*8     w(n2),v(n2)
+
+      do j=1,nstate_np
+         do i=1,nstate
+            j0 = (j-1)*nstate+i
+            rho_r(i,j) = v(0*nstate2+j0)
+            rho_i(i,j) = v(1*nstate2+j0)
+         enddo
+      enddo
+
+
+      call cem_quantum3_hamiltonian
+      call quantum_lin_mxm
+!      call quantum_lin_mpi_get
+
+      do j=1,nstate_np
+         do i=1,nstate
+            j0 = (j-1)*nstate+i
+            w(0*nstate2+j0) = resrho_r(i,j)
+            w(1*nstate2+j0) = resrho_i(i,j)
+         enddo
+      enddo
 
       return
       end
 
 
-c--------------------------------------------------------------------- 
-      subroutine cem_quantum3_propagation_rk
-c--------------------------------------------------------------------- 
+c------------------------------------------------------------------
+      subroutine cem_quantum3_propagation_init(en_t,obs_freq)
+c------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'QUANT'
-      include 'RK5'
-#ifdef MPI
-      include 'mpif.h'
-#endif
-      integer  iEh, ii, IERR, jj,kk
-      real*8     stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
-      real*8     sigr,sigi,tmpr,tmpi,rinc,sigcon,pulseFactor,fullPulse
-      real*8   dclock,c_speed,d_per_au,eesu_per_au,eps_med,eV
-      complex  sig,en_t(nEh),obs_freq(maxOp,nEh),tmpc1,ci
+      integer ii,jj
+      complex  sig,en_t(nEh),obs_freq(maxOp,nEh)
 
-      ci=(0.0,1.0)
       if(nqstep.gt.maxTimeSteps) then
          print*, 'ERROR!'
          print*, 'nqstep TOO LARGE FOR THIS maxTimeSteps!'
+         print*, 'maxTimeSteps = ',maxTimeSteps
+         call exitt()
+      endif
+      if(ham_finalized.eqv..false.) then
+         print*, 'ERROR!'
+         print*, 'NO HAMILTONIAN!'
+         print*, 'Did you call quantum_ham_finalize_csr?'
          call exitt()
       endif
 
       if(nid.eq.0) then
 c     Write file headers 
-         write(13,*)'#Time,Observables'
-         write(12,*)'#Time,Pulse,Populations'
+         if(ifPulse.eqv..true.) then
+            write(13,*)'#Time,Pulse,Observables'
+         else
+            write(13,*)'#Time,Observables'
+         endif
+         write(12,*)'#Time,Populations'
          if(calc_concurrence.eqv..true.) then
             if(ltonq.eq.8) then
                write(14,*)'#Time,3:2,3:1,2:1'
@@ -302,6 +565,36 @@ c     Write file headers
          endif
       endif
 
+      call cem_quantum3_initialize      
+      call cem_quantum3_gs
+
+
+      if(ifPulse.eqv..true.) then
+         do ii=1,nEh
+            en_t(ii) = (0.0,0.0)
+            do jj=1,numObservables
+               obs_freq(jj,ii) = (0.0,0.0)
+            enddo
+         enddo
+      endif
+
+
+
+      return
+      end
+c--------------------------------------------------------------------- 
+      subroutine cem_quantum3_propagation_rk
+c--------------------------------------------------------------------- 
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'RK5'
+      integer  iEh, ii, IERR, jj,kk
+      real*8     stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
+      real*8   dclock,old_dt
+      complex  sig,en_t(nEh),obs_freq(maxOp,nEh),tmpc1,ci
+
+      ci=(0.0,1.0)
       stime0= 0.0          
       stime1= 0.0          
       stime2= 0.0          
@@ -312,9 +605,10 @@ c     Write file headers
       stime7= 0.0      
       stime0= dclock()     
       stime1= dclock()
-      call cem_quantum3_initialize      
-      call cem_quantum3_gs
+
+      call cem_quantum3_propagation_init(obs_freq,en_t)
       call cem_quantum3_rk_storage
+
 ccc Setup acc stuff
 
 !$acc data copyin(hamilt_I_m_p,hamilt_0_m_p,hamilt_m_p)
@@ -331,19 +625,11 @@ c!$acc&     copyin(omega_s,gamma_s,s_mu)
 c!$acc&     copyin(pulse_omega_0,pulse_t_0,pulse_duration,energy0_pls)
 c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
 
-      if(ifPulse.eqv..true.) then
-         do ii=1,nEh
-            en_t(ii) = (0.0,0.0)
-            do jj=1,numObservables
-               obs_freq(jj,ii) = (0.0,0.0)
-            enddo
-         enddo
-      endif
 
-c     Pulsed case
-c      do iqstep= 1,nqstep
        iqstep=1
        iiqstep = 1
+       old_dt = dt
+       dt     = dt/2
        do while(time.lt.timemax)
           stime1= dclock()
          do ii= 1,5
@@ -351,7 +637,8 @@ c      do iqstep= 1,nqstep
             call cem_quantum3_hamiltonian()
             stime4 = stime4 + dclock()-stime7
             stime7 = dclock()
-            call quantum_lin_mpi_get()
+            call quantum_lin_mxm()
+!            call quantum_lin_mpi_get()
             stime5 = stime5 + dclock()-stime7
             stime7 = dclock()
             call rk_quantum3_ab(ii)
@@ -362,6 +649,9 @@ c             dt=dt_small
 c         else
 c             dt=dt_large
 c         endif
+         if(time.gt.timemax/2) then
+            dt = old_dt
+         endif
          time= time+dt
          stime7= dclock()
          if(useGates.eqv..true.) then
@@ -388,27 +678,81 @@ c$$$            call exitt()
 c$$$         endif
       enddo
 
-c$$$      print*,"Rho_r final"
-c$$$      do ii=1,nstate
-c$$$         write(6,'(100g25.15)') (rho_r(ii,jj), jj=1,nstate)
-c$$$      enddo
-      
       stime0 = dclock()-stime0
       if(nid.eq.0) write(6,*)'stime0:',stime0 
+
+c$$$      print*,"Rho_r final"
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+
+      call cem_quantum3_propagation_finalize(en_t,obs_freq)
+
+!$acc end data
+
+      return
+      end
+
+
+c---------------------------------------------------------------------
+      subroutine cem_quantum3_propagation_finalize(en_t,obs_freq)
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+#ifdef MPI
+      include 'mpif.h'
+#endif
+
+      integer  iEh, ii, IERR, jj,kk,number_pops
+      real*8     sigr,sigi,tmpr,tmpi,rinc,sigcon,pulseFactor,fullPulse
+      real*8   dclock,c_speed,d_per_au,eesu_per_au,eps_med,eV
+      complex  sig,en_t(nEh),obs_freq(maxOp,nEh),tmpc1,ci
+
+      tmpr = 0
+!Reduce the trace of rho as a sanity check - should always be 1!
+      do ii=1,nstate_np
+         tmpr = tmpr + rho_r(ii+c_offset,ii)
+      enddo
+      if(nid.eq.0) then
+         call MPI_REDUCE(MPI_IN_PLACE,tmpr,1,MPI_REAL8,MPI_SUM,0,
+     $        MPI_COMM_WORLD,IERR)
+      else
+         call MPI_REDUCE(tmpr,tmpr,1,MPI_REAL8,MPI_SUM,0,
+     $        MPI_COMM_WORLD,IERR)
+      endif
+      if(nid.eq.0) print*,"rho_r trace",tmpr
+
       iiqstep = iiqstep - 1
       iqstep = iqstep -1
 !     Reduce time vectors
 #ifdef MPI
+      kk=1
       do ii=1,numberOfOps
-         if(nid.eq.0) then
-            call MPI_REDUCE(MPI_IN_PLACE,pop_time(1,ii),iiqstep,
-     $           MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+         if(is_vec(ii).eqv..true.) then
+            do jj=1,levels(ii)
+               if(nid.eq.0) then
+                  call MPI_REDUCE(MPI_IN_PLACE,pop_time(1,kk),iiqstep,
+     $                 MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+               else
+                  call MPI_REDUCE(pop_time(1,kk),pop_time(1,kk),iiqstep,
+     $                 MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+               endif
+               kk = kk+1
+            enddo
          else
-            call MPI_REDUCE(pop_time(1,ii),pop_time(1,ii),iiqstep,
-     $           MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+            if(nid.eq.0) then
+               call MPI_REDUCE(MPI_IN_PLACE,pop_time(1,kk),iiqstep,
+     $              MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+            else
+               call MPI_REDUCE(pop_time(1,kk),pop_time(1,kk),iiqstep,
+     $              MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+            endif
+            kk = kk+1
          endif
       enddo
-
+      
+      number_pops = kk - 1
       do ii=1,numObservables
          if(nid.eq.0) then
             call MPI_REDUCE(MPI_IN_PLACE,obs_time(1,ii),iqstep,
@@ -422,14 +766,13 @@ c$$$      enddo
 #endif
 
 
-
       if(nid.eq.0) then
          time = dt
          kk = 1
          if(ifPulse.eqv..true.) then
 
             do ii=1,iqstep
-            
+               
                call usertimedep(pulseFactor)
 c     Now, do the fourier transform to save the value
 !     Envelope*oscillations --- consider putting oscillations in user control?
@@ -484,10 +827,11 @@ c     Now, do the fourier transform to save the value
          enddo
 
          time = dt
+
          do ii=1,iiqstep
-            !Print populations
+!Print populations
             write(12,12)time*timeunit
-     $           ,(pop_time(ii,jj),jj=1,numberOfOps)
+     $           ,(pop_time(ii,jj),jj=1,number_pops)
 
             time = time+printdt
          enddo
@@ -497,8 +841,8 @@ c     Print out results
             write(11,*)'#eV,sig_abs,sig_scatt,sig_tot'
 
 !     Update this stuff!
-!I'm not sure how to do this is a really user friendly manner
-!FIXME! Hardcoded
+!     I'm not sure how to do this is a really user friendly manner
+!     FIXME! Hardcoded
             c_speed = 2.99792458d10 !cm/s
             d_per_au = 1.0d0 / 3.93430307d-1
             eesu_per_au = 5.14220652d17 / c_speed
@@ -531,15 +875,13 @@ c     Print out results
             
  13         format(1p5e20.10)
          endif
-      close(12)
-      close(11)
+         close(12)
+         close(11)
       endif
 
-!$acc end data
 
       return
       end
-
 c--------------------------------------------------------------------- 
       subroutine cem_quantum3_hamiltonian()
 c--------------------------------------------------------------------- 
@@ -700,10 +1042,11 @@ c!$omp end parallel do
 c!$omp parallel do collapse(1)
       do jj = 1,nstate_np
       do ii = 1,nstate
+         j0 = (jj-1)*nstate+ii
          tmpfq= state_sums(ii,jj)*pulse_omega_0*rho(ii,jj)
-         tmprr= 2*tmp_r1(ii,jj)-tmprv((jj-1)*nstate+ii)
-!         if(ii.eq.jj+c_offset) tmprr = 0
-         tmpii = tmpiv((jj-1)*nstate+ii)
+         tmprr= 2*tmp_r1(ii,jj)-tmprv(j0)
+!         if(ii.eq.jj+c_offset) tmprr = 0 !Diagonal parts are treated below
+         tmpii = tmpiv(j0)
 !         if(ii.eq.jj+c_offset) tmpii = 2*tmp_i1(ii,jj)
          tmpcc= tmprr + ci*tmpii
          drho(ii,jj)= - ci*(tmpcc - tmpfq) 
@@ -716,17 +1059,22 @@ c!$omp parallel do collapse(1)
 !     The diagonal parts need special treatment
       do jj=1,nstate_np
          tmpfq= state_sums(jj+c_offset,jj)*pulse_omega_0
-<<<<<<< HEAD
      $        *rho(jj+c_offset,jj)
-=======
-     $           *rho(jj+c_offset,jj)
->>>>>>> Started adding new state vector routines
          tmpcc = ci*2*tmp_i1(jj+c_offset,jj)
          drho(jj+c_offset,jj) = -ci*(tmpcc-tmpfq)
          resrho_r(jj+c_offset,jj) = real(drho(jj+c_offset,jj))
          resrho_i(jj+c_offset,jj) = imag(drho(jj+c_offset,jj))
       enddo
 
+c$$$      print*,'post2'
+c$$$      print*,'resrho_r'
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (resrho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$      print*,'resrho_i'
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (resrho_i(ii,jj), jj=1,nstate)
+c$$$      enddo
 
 c!$omp end parallel do
 !$acc end parallel loop
@@ -858,9 +1206,9 @@ c-------------------------------------------------------------------
 #ifdef MPI
       include 'mpif.h'
 #endif
-      integer ii,jj,iq,tilingNumber,curState,ierr
-      complex*16 ci
-      real*8     pop(maxOp),currentPop
+      integer ii,jj,iq,tilingNumber,curState,ierr,ll,kk
+      complex*16 ci,tmp_cs
+      real*8     pop,currentPop
 
 
       ci = (0.0,1.0)
@@ -872,12 +1220,8 @@ c-------------------------------------------------------------------
          tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
          if(ifPulse.eqv..true.) then
             tmp_c1(ii,jj) = tmp_c1(ii,jj)*
-<<<<<<< HEAD
-     $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
-=======
-     $           *exp(-ci*state_sums(ii,jj)*pulse_omega_0
+     $           exp(-ci*state_sums(ii,jj)*pulse_omega_0
      $           *(time-pulse_t_0))
->>>>>>> Started adding new state vector routines
          endif
       enddo
       enddo
@@ -885,25 +1229,75 @@ c-------------------------------------------------------------------
 !$acc update host(rho)
 !$acc end data
 
-      do iq=1,numberOfOps
-         pop(iq) = 0
-      enddo
-
+      ll=1
 c     Find populations 
       do ii=1,numberOfOps
          tilingNumber = oldN(ii)
-         do jj=1,nstate_np
-            curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
-            currentPop = real(tmp_c1(jj+c_offset,jj))
-            !print*,curState,currentPop
-            pop(ii) = pop(ii) + 
-     $           curState*currentPop
-         enddo
-         if(abs(pop(ii)).le.1e-13) pop(ii) = 0.0
+         if(is_vec(ii).eqv..true.) then
+            !if the operator is a vec operator, then we loop through each
+            !level of the vec operator, which is treated as a series of 
+            !individual populations. If the curState is equal to the
+            !operator we are looking at, then we add the population
+            !This could be sped up, since we could go through jj
+            !once, with more if statement
+
+            !FIXME - pop_time size may need a firmer check now
+            do kk=1,levels(ii)
+               pop = 0.0
+               do jj=1,nstate_np
+                  curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
+                  currentPop = real(tmp_c1(jj+c_offset,jj))
+                  if(curState.eq.kk-1) then
+!     print*,curState,currentPop
+                     pop = pop + currentPop
+                  endif
+               enddo
+               if(abs(pop).le.1e-13) pop = 0.0
+               pop_time(iiqstep,ll) = pop
+               ll=ll+1
+            enddo
+         else
+            pop = 0.0
+            do jj=1,nstate_np
+               curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
+               currentPop = real(tmp_c1(jj+c_offset,jj))
+!     print*,curState,currentPop
+               pop = pop + 
+     $              curState*currentPop
+            enddo
 !     Save results
-         pop_time(iiqstep,ii) = pop(ii)
+            if(abs(pop).le.1e-13) pop = 0.0
+            pop_time(iiqstep,ll) = pop
+            ll=ll+1
+         endif
+
+
+
       enddo
       
+
+c     Check for radically wrong results
+c     tr(rho) = 1
+c     Local only check (just for exploding values)
+      pop = 0.0
+      do ii=1,nstate_np
+         pop = pop+rho_r(ii+c_offset,ii)
+      enddo
+      if(pop.gt.1.01) then
+         print*,'LOCAL TRACE GREATER THAN ONE ON'
+         print*,'CORE ',nid
+         stop
+         call exitt()
+      endif
+
+c     global check
+      call gop(pop,currentPop,'+  ',1)
+      if(nid.eq.0.and.abs(currentPop-1).gt.1e-13) then 
+         print*,'GLOBAL TRACE DIFFERENT THAN ONE'
+         print*,'TRACE',currentPop
+         stop
+         call exitt()
+      endif
 c     Reduce results
 c$$$#ifdef MPI
 c$$$         if(nid.eq.0) then
@@ -958,13 +1352,9 @@ c--------------------------------------------------------------------
       do jj=1,nstate_np
       do ii=1,nstate
             tmp_c1(ii,jj)= (rho_r(ii,jj)+ci*rho_i(ii,jj))
-<<<<<<< HEAD
-     $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
-=======
             tmp_c1(ii,jj) = tmp_c1(ii,jj)
      $           *exp(-ci*state_sums(ii,jj)*pulse_omega_0
      $           *(time-pulse_t_0))
->>>>>>> Started adding new state vector routines
       enddo
       enddo
 !$acc end parallel loop
@@ -1060,13 +1450,9 @@ c     store result in red_rho
 !            j0 = j0_array(kk)!(jj-1)*nstate+ii
             j0 = (jj-1)*nstate+ii
             red_rho(ii,jj) = (tmprv(j0) + ci*tmpiv(j0))
-<<<<<<< HEAD
-     $        *exp(-ci*state_sums(ii,jj)*pulse_omega_0*(time-pulse_t_0))
-=======
             red_rho(ii,jj) = red_rho(ii,jj)
      $           *exp(-ci*state_sums(ii,jj)*pulse_omega_0
      $           *(time-pulse_t_0))
->>>>>>> Started adding new state vector routines
 !            kk = kk+1
          enddo
       enddo

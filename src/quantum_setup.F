@@ -20,8 +20,9 @@
       ifPulse          = .false.
       rwa              = .false.
       calc_concurrence = .false.
+      ham_finalized    = .false.
       pi               = 4.*ATAN(1.0)
-
+      pulse_omega_0    = 0.0
       !Zero out the gates_table
       do ii=1,6
          do jj = 1,maxOp
@@ -59,7 +60,9 @@
       newHandleNumber = newHandleNumber+1
       handle_m        = newHandleNumber
       newHandleNumber = newHandleNumber+1
-
+      
+      first_handle(numberOfOps) = handle
+      is_vec(numberOfOps)  = .false.
       handle_to_op(handle) = numberOfOps
       handle_to_op(handle_t) = numberOfOps
       handle_to_op(handle_m) = numberOfOps
@@ -122,7 +125,7 @@
          call exitt()
       endif
 
-      
+      is_vec(numberOfOps) = .true.
 !     oldN is how many times we need to repeat this ops levels
 !     It represents the previous total number of levels
 
@@ -167,7 +170,7 @@
       if(newHandleNumber.gt.maxOp) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'MAXOP TOO LOW'
+            print*,'MAXOP ',maxOp,' TOO LOW NEED',newHandleNumber
             print*,'Please recompile with a larger maxOp'
          endif
          call exitt()
@@ -180,6 +183,7 @@
       tilingNum = oldN(vec_to_op(-handle1))
       handle_to_op(handle_new) = -ii
       vec_state2(handle_new) = vec_state(-handle1)
+
       do jj=1,nstate
          curState = state(vec_to_op(-handle1),
      $        mod(jj-1,tilingNum)+1)
@@ -190,10 +194,10 @@
          else
             value = 0
          endif
-         
+
          mat_offset = oldN(ii)/maxLevel*(vec_state(-handle2) - 
      $        vec_state(-handle1))
-         
+
          op_csr_a(jj,handle_new)  = value
          op_csr_ia(jj,handle_new) = jj
          if(jj+mat_offset.gt.0) then
@@ -201,12 +205,9 @@
          else
             op_csr_ja(jj,handle_new) = min(jj,nstate)
          endif
-!         print*,mat_offset,value,jj
-!         print*,vec_state(-handle2),
-!     $        vec_state(-handle1)
       enddo
 
-         
+      op_csr_ia(nstate+1,handle_new) = jj !We need one extra because of the definition of CSR
 
       return
       end
@@ -262,39 +263,40 @@ c      print*,'after check two',nid
       do ii=1,numberOfOps
          maxLevel     = levels(ii)
          tilingNumber = oldN(ii)
-         op_num       = (ii-1)*3
-         !!Possible change this to nstate/npx
-         do jj=1,nstate
-            curState = state(ii,mod(jj-1,tilingNumber)+1)
-            value = sqrt(real(curState+1))
+         !!Possible change: this to nstate/np
+         if(.not.is_vec(ii)) then
+            op_num       = first_handle(ii)
+            do jj=1,nstate
+               curState = state(ii,mod(jj-1,tilingNumber)+1)
+               value = sqrt(real(curState+1))
                
-!     op_num+1,op_num+2, refer to the different basic operators
-!     op_num+1 = op, op_num+2 = op^dag, op_num+3 = op^dag*op
+!     op_num,op_num+1, etc refer to the different basic operators
+!     op_num = op, op_num+1 = op^dag, op_num+2 = op^dag*op
                
-            op_csr_a(jj,op_num+3) = curState
-            op_csr_ja(jj,op_num+3) = jj
-            op_csr_ia(jj,op_num+3) = jj
-            
-            if(curState.lt.maxLevel-1) then
-               mat_offset = oldN(ii)/maxLevel
-               mat_bound  = jj+mat_offset
-               op_csr_a(jj,op_num+1) = value
-               op_csr_ia(jj,op_num+1) = jj
-               op_csr_ja(jj,op_num+1) = mat_bound
-            else
-               op_csr_a(jj,op_num+1) = 0.0
-               op_csr_ia(jj,op_num+1) = jj
-               op_csr_ja(jj,op_num+1) = jj
-            endif
-         enddo 
-         op_csr_ia(nstate+1,op_num+3) = nstate+1
-         op_csr_ia(nstate+1,op_num+1) = nstate+1
+               op_csr_a(jj,op_num+2) = curState
+               op_csr_ja(jj,op_num+2) = jj
+               op_csr_ia(jj,op_num+2) = jj
+               
+               if(curState.lt.maxLevel-1) then
+                  mat_offset = oldN(ii)/maxLevel
+                  mat_bound  = jj+mat_offset
+                  op_csr_a(jj,op_num) = value
+                  op_csr_ia(jj,op_num) = jj
+                  op_csr_ja(jj,op_num) = mat_bound
+               else
+                  op_csr_a(jj,op_num) = 0.0
+                  op_csr_ia(jj,op_num) = jj
+                  op_csr_ja(jj,op_num) = jj
+               endif
+            enddo 
+            op_csr_ia(nstate+1,op_num+2) = nstate+1
+            op_csr_ia(nstate+1,op_num) = nstate+1
 !     Get transpose of op_num+1 (to get op^dag)
-         call csrcsc(nstate,1,1,op_csr_a(1,op_num+1),
-     $        op_csr_ja(1,op_num+1),op_csr_ia(1,op_num+1),
-     $        op_csr_a(1,op_num+2),
-     $        op_csr_ja(1,op_num+2),op_csr_ia(1,op_num+2))
-         
+            call csrcsc(nstate,1,1,op_csr_a(1,op_num),
+     $           op_csr_ja(1,op_num),op_csr_ia(1,op_num),
+     $           op_csr_a(1,op_num+1),
+     $           op_csr_ja(1,op_num+1),op_csr_ia(1,op_num+1))
+         endif
       enddo
 
       
@@ -344,6 +346,9 @@ c      print*,'after check two',nid
       return
       end
 
+
+!*********************************************************************
+! Combines two operators. Addition if op=0, multiplication if op=1
 !**********************************************************************
       subroutine quantum_combine_op_csr(handle1,handle2,op,handle3)
       implicit none
@@ -527,6 +532,31 @@ c$$$       enddo
 
 
       end
+!**********************************************************************
+
+      subroutine quantum_print_ham()
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer handle,ii,jj,ierr
+      real    op(nstate,nstate)
+
+
+      if(nid.eq.0) then
+         open(unit=20,file='ham')
+         call csrdns(nstate,nstate,ham_i,
+     $        ham_ja,ham_ia,
+     $        op,nstate,ierr)
+         do ii=1,nstate
+            write(20,'(300g15.5)') (op(ii,jj), jj=1,nstate)
+         enddo
+         close(unit=20)
+      endif
+      
+      return
+      end
+
 
 !**********************************************************************
       subroutine quantum_print_csr(handle)
@@ -536,6 +566,11 @@ c$$$       enddo
 
       integer handle,ii,jj,ierr
       real    op(nstate,nstate)
+      if(handle.lt.0.or.handle.gt.newHandleNumber) then
+         print*,handle,' is not a valid handle for operator.'
+         return
+      endif
+
       if(nid.eq.0) then
          call csrdns(nstate,nstate,op_csr_a(1,handle),
      $        op_csr_ja(1,handle),op_csr_ia(1,handle),op,nstate,ierr)
@@ -562,6 +597,7 @@ c$$$       enddo
       call quantum_add_csr(nstate,nstate,0,ham_i,ham_i_ja,ham_i_ia,
      $     ham_d,ham_d_ja,ham_d_ia,ham_a,ham_ja,ham_ia,ham_nnz)
 
+      ham_finalized = .true.
       return
       end
 
@@ -588,6 +624,32 @@ c$$$       enddo
       return
       end
 
+!************************************************************
+! Set initial populations
+c$$$!************************************************************
+c$$$      subroutine quantum_init_pop_ladder(handle,pop)
+c$$$      implicit none
+c$$$      include 'SIZE'
+c$$$      include 'QUANT'
+c$$$      integer handle,op_num,tilingNum
+c$$$      integer pop
+c$$$
+c$$$      op_num = handle_to_op(handle2)
+c$$$      tilingNum = oldN(abs(op_num))
+c$$$
+c$$$
+c$$$      do ii=1,nstate_np
+c$$$         state1 = state(abs(op_num),
+c$$$     $        mod(jj+c_offset-1,tilingNum)+1)
+c$$$         if(state1.eq.pop) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0
+c$$$         endif
+c$$$      enddo
+c$$$
+c$$$      return
+c$$$      end
+
+
 !     Should be handle1 = left term of a rho a^\dagger, handle2 = part with rho, individually,
 !     such as a^\dagger a \rho 
 !************************************************************
@@ -597,24 +659,29 @@ c$$$       enddo
       include 'QUANT'
 
       integer jj,ii,kk,handle1,handle2,tilingNum,state1,state2
-      integer ll,mm,maxState,target_core,iOp,kkOld
+      integer ll,mm,num_levels,target_core,iOp,kkOld
       integer*8 target_disp
       integer tilingNum2,op_num
       real scalar
+      logical add_to_nl
 
       !be sure to set this initially!
 
       numberOfLinOps = numberOfLinOps + 1 
-      if(numberOfLinOps.gt.maxOp/4) then
+      if(numberOfLinOps.gt.maxOp/2) then
          if(nid.eq.0) then
             print*,'ERROR!'
             print*,'TOO MANY LINOPS',numberOfLinOps,
-     $           ' FOR THIS MAXOP/4', MAXOP/4
+     $           ' FOR THIS MAXOP/2', MAXOP/2
          endif
          call exitt()
       endif
       iOp = numberOfLinOps
 
+      !Store things for the explicit mxm lindblad
+      lin_mxm_op(1,iOp) = handle1
+      lin_mxm_op(2,iOp) = handle2
+      lin_mxm_a(iOp)    = scalar
       !FIXME: handle2/3 is dangerous - put a check or think of a better way!
       op_num = handle_to_op(handle2)
 
@@ -624,8 +691,10 @@ c$$$       enddo
          if(nid.eq.0) then
             print*,'ERROR!'
             print*,'HANDLE2 IS NOT A BASE NUMBER OPERATOR'
+            print*,'WILL NOT WORK WITH MPI_GET LINDBLAD'
          endif
-         call exitt()
+         return
+!         call exitt()
       endif
 
       do jj=1,nstate_np
@@ -642,7 +711,6 @@ c$$$       enddo
 
          do ii=1,nstate
             state2 = state(abs(op_num),mod(ii-1,tilingNum)+1)
-
             if(op_num.lt.0) then !Fix to allow vec number like operators
                if(state2.eq.vec_state2(handle2)) then
                   state2 = 1
@@ -653,7 +721,6 @@ c$$$       enddo
             
             lin_comb_op(ii,jj) = lin_comb_op(ii,jj) + 
      $           scalar*(state1+state2)
-
 
             if(handle1.eq.handle2) then !FIXME handle1.eq.handle2 is dangerous
                lin_comb_op(ii,jj) = lin_comb_op(ii,jj) -
@@ -676,9 +743,9 @@ c$$$       enddo
          op_num = handle_to_op(handle1)
 !     lin_get setup
          if(op_num.gt.0) then
-            maxState = levels(abs(op_num))
+            num_levels = levels(abs(op_num))
          else
-            maxState = 1
+            num_levels = levels(abs(op_num)) !2 because this is number of levels
          endif
 
          tilingNum = lin_tiling_N(abs(op_num))
@@ -690,21 +757,24 @@ c$$$       enddo
 
          lin_offset(iOp) = tilingNum
          do jj=1,nstate_np
+            !This is a logical that we use when dealing with vec operators
+            add_to_nl = .true. 
             target_core = (jj+c_offset+tilingNum-1)*np/nstate
             state1 = state(abs(op_num),
      $           mod(jj+c_offset-1,tilingNum2)+1)
 
             if(op_num.lt.0) then !Fix to allow vec number like operators
                if(state1.eq.vec_state2(handle1)) then
-                  state1 = 1
+                  add_to_nl = add_to_nl.and..true.
                else
-                  state1 = 0
+                  add_to_nl = add_to_nl.and..false.
                endif
             endif
 
-            if(target_core.ne.nid.and.state1+1.lt.maxState.and.
-     $           target_core.lt.np.and.jj+c_offset+tilingNum.le.nstate) 
-     $           then
+            !We do .lt. num_levels because num_levels is maxState + 1
+            if(target_core.ne.nid.and.state1+1.lt.num_levels.and.
+     $           target_core.lt.np.and.jj+c_offset+tilingNum.le.nstate
+     $           .and.add_to_nl) then
                kk = kk + 1
                target_disp = (jj+c_offset+tilingNum-target_core*nstate
      $              /np-1)*maxN
@@ -714,32 +784,40 @@ c$$$       enddo
 
             mm = 0
             do ii=1,nstate
-               state2 = state(op_num,
+               state2 = state(abs(op_num),
      $              mod(ii-1,tilingNum2)+1)
 
                if(op_num.lt.0) then !Fix to allow vec number like operators
-                  if(state2.eq.vec_state2(handle2)) then
-                     state2 = 1
+                  if(state2.eq.vec_state2(handle1)) then
+                     add_to_nl = add_to_nl.and..true.
                   else
-                     state2 = 0
+                     add_to_nl = add_to_nl.and..false.
                   endif
                endif
-
-               if(state1+1.lt.maxState.and.state2+1.lt.
-     $              maxState.and.jj+c_offset+tilingNum.le.nstate.and.
-     $              ii+tilingNum.le.nstate) then
-                  if(target_core.eq.nid) then
+               
+               if(state1+1.lt.num_levels.and.state2+1.lt.
+     $              num_levels.and.jj+c_offset+tilingNum.le.nstate.and.
+     $              ii+tilingNum.le.nstate.and.add_to_nl) then
+                  if(target_core.eq.nid) then !Local elements
                      ll = ll+1
                      lin_l_index(1,ll,iOp) = ii !i0
                      lin_l_index(2,ll,iOp) = jj !j0
-                     lin_l_a(ll,iOp) = -2*scalar*sqrt(real((state1+1)*
-     $                    (state2+1)))
-                  else
+                     if(op_num.lt.0) then
+                        lin_l_a(ll,iOp) = -2*scalar
+                     else
+                        lin_l_a(ll,iOp) = -2*scalar*sqrt(real((state1+1)
+     $                       *(state2+1)))
+                     endif
+                  else !Nonlocal Elements
                      mm = mm+1
                      lin_nl_index(1,mm,kk,iOp) = ii !i0
                      lin_nl_index(2,mm,kk,iOp) = jj !j0
-                     lin_nl_a(mm,kk,iOp) = -2*scalar*sqrt(real(
-     $                    (state1+1)*(state2+1)))
+                     if(op_num.lt.0) then
+                        lin_nl_a(mm,kk,iOp) = -2*scalar
+                     else
+                        lin_nl_a(mm,kk,iOp) = -2*scalar*sqrt(real(
+     $                       (state1+1)*(state2+1)))
+                     endif
                   endif
                endif
             enddo
@@ -755,8 +833,8 @@ c$$$       enddo
 !************************************************************
 !     Adds a part to the lindblad operator using the transpose of the 2nd handle
 !     Assumes 2nd argument is number operator!
-!     Should be handle1 = left term of a rho a^\dagger, handle2 = part with rho, individually,
-!     such as a^\dagger a \rho 
+!     Should be handle1 = left term of (a rho a^\dagger), handle2 = part with rho, individually,
+!     such as (a^\dagger a \rho)
 !************************************************************
       subroutine quantum_lin_add_trans(handle1,handle2,scalar)
       implicit none
@@ -764,7 +842,7 @@ c$$$       enddo
       include 'QUANT'
 
       integer jj,ii,kk,handle1,handle2,tilingNum,state1,state2
-      integer ll,mm,maxState,target_core,iOp,kkOld
+      integer ll,mm,num_levels,target_core,iOp,kkOld
       integer*8 target_disp
       integer tilingNum2,op_num
       real scalar
@@ -791,6 +869,15 @@ c$$$       enddo
          endif
          call exitt()
       endif
+
+      op_num = handle_to_op(handle1)
+      if(op_num.gt.0) then
+         num_levels = levels(abs(op_num))
+      else
+         num_levels = 2
+      endif
+
+
       do jj=1,nstate_np
          state1 = state(abs(op_num),
      $        mod(jj+c_offset-1,tilingNum)+1)
@@ -814,14 +901,23 @@ c$$$       enddo
                endif
             endif
 
-            lin_comb_op(ii,jj) = lin_comb_op(ii,jj) + 
-     $           scalar*((state1*(state1+1))**(0.5)+
-     $           (state2*(state2+1))**(0.5))
-
-            if(handle1.eq.handle2) then !FIXME handle1.eq.handle2 is dangerous
-               lin_comb_op(ii,jj) = lin_comb_op(ii,jj) -
-     $              2*scalar*state1*state2
+            if(state1+1.lt.num_levels) then
+               lin_comb_op(ii,jj) = lin_comb_op(ii,jj) + 
+     $              scalar*(state1+1)
             endif
+            if(state2+1.lt.num_levels) then
+               lin_comb_op(ii,jj) = lin_comb_op(ii,jj) + 
+     $              scalar*(state2+1)
+            endif
+            
+            !FIXME: Not sure if below is 100% correct
+            if(state1+1.lt.num_levels.and.state2+1.lt.num_levels) then
+               if(handle1.eq.handle2) then !FIXME handle1.eq.handle2 is dangerous
+                  lin_comb_op(ii,jj) = lin_comb_op(ii,jj) -
+     $                 2*scalar*(state1+1)*(state2+1)
+               endif
+            endif
+
          enddo
       enddo
 
@@ -838,14 +934,8 @@ c$$$       enddo
          endif
 
 !     lin_get setup
-         op_num = handle_to_op(handle1)
-         if(op_num.gt.0) then
-            maxState = levels(abs(op_num))
-         else
-            maxState = 1
-         endif
 
-         tilingNum = lin_tiling_N(abs(op_num))
+         tilingNum = -lin_tiling_N(abs(op_num))
          tilingNum2 = oldN(abs(op_num))
 
          kk = 0
@@ -868,8 +958,8 @@ c$$$       enddo
             endif
 
 
-            if(target_core.ne.nid.and.state1+1.lt.maxState.and.
-     $           target_core.lt.np.and.jj+c_offset+tilingNum.le.nstate) 
+            if(target_core.ne.nid.and.state1-1.ge.0.and.
+     $           target_core.ge.0.and.jj+c_offset+tilingNum.gt.0) 
      $           then
                kk = kk + 1
                target_disp = (jj+c_offset+tilingNum-target_core*nstate
@@ -891,21 +981,21 @@ c$$$       enddo
                   endif
                endif
 
-               if(state1+1.lt.maxState.and.state2+1.lt.
-     $              maxState.and.jj+c_offset+tilingNum.le.nstate.and.
-     $              ii+tilingNum.le.nstate) then
-                  if(target_core.eq.nid) then
+               if(state1-1.ge.0.and.state2-1.ge.0
+     $              .and.jj+c_offset+tilingNum.gt.0.and.
+     $              ii+tilingNum.gt.0) then
+                  if(target_core.eq.nid) then !Local elements
                      ll = ll+1
                      lin_l_index(1,ll,iOp) = ii !i0
                      lin_l_index(2,ll,iOp) = jj !j0
-                     lin_l_a(ll,iOp) = -2*scalar*sqrt(real((state1+1)*
-     $                    (state2+1)))
-                  else
+                     lin_l_a(ll,iOp) = -2*scalar*sqrt(real((state1)*
+     $                    (state2)))
+                  else !Nonlocal elements
                      mm = mm+1
                      lin_nl_index(1,mm,kk,iOp) = ii !i0
                      lin_nl_index(2,mm,kk,iOp) = jj !j0
                      lin_nl_a(mm,kk,iOp) = -2*scalar*sqrt(real(
-     $                    (state1+1)*(state2+1)))
+     $                    (state1)*(state2)))
                   endif
                endif
             enddo
@@ -914,6 +1004,141 @@ c$$$       enddo
          lin_l_length(iOp)      = ll
          lin_nl_col_length(iOp) = kk
       endif
+
+      end
+
+!*********************************************************************
+!
+!*********************************************************************
+      subroutine quantum_lin_mxm()
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'mpif.h'
+
+      complex ci,tmpcc
+      integer ii,jj,kk,i0,j0,ierr,iOp,xx,gx
+      real tmprr,tmpii,scalar
+      xx = 4
+      gx = 9
+      
+      ci = (0.0,1.0) 
+
+c$$$      do jj=1,nstate_np
+c$$$         do kk=1,nstate
+c$$$            drho(kk,jj) = 0.0
+c$$$            rho_r(kk,jj)  = 1.0
+c$$$            rho_i(kk,jj)  = 1.0
+c$$$         enddo
+c$$$      enddo
+
+      do iOp=1,numberOfLinOps
+
+         gx = lin_mxm_op(1,iOp)
+         xx = lin_mxm_op(2,iOp)
+         scalar = lin_mxm_a(iOp)
+!xx*rho part
+         call cem_quantum3_op_mxm(rho_r,tmp_r1,xx)
+         call cem_quantum3_op_mxm(rho_i,tmp_i1,xx)
+
+
+         do jj = 1,nstate_np
+            do ii = 1,nstate
+!     j0 = j0_array(kk)!(jj-1)*nstate+ii
+               j0 = (jj-1)*nstate+ii
+               tmprv(j0) = tmp_r1(ii,jj)
+               tmpiv(j0) = tmp_i1(ii,jj)
+            enddo
+         enddo
+         
+!Transpose to get rho*xx
+         call gs_op_fields(gs_handle_q_H,tmprv,
+     $        nstate_p,1,1,1,0)
+         call gs_op_fields(gs_handle_q_H,tmpiv,nstate_p,1,1,1,0)
+         
+!Add xx*rho + xx*rho to drho
+         do jj = 1,nstate_np
+            do ii = 1,nstate
+               j0 = (jj-1)*nstate+ii
+               tmprr= tmprv(j0)
+               if(ii.eq.jj+c_offset) tmprr = 2*tmp_r1(ii,jj)
+               tmpii = 2*tmp_i1(ii,jj) - tmpiv(j0)
+               if(ii.eq.jj+c_offset) tmpii = 0
+               tmpcc= tmprr + ci*tmpii
+               drho(ii,jj)= drho(ii,jj) +scalar*tmpcc 
+            enddo
+         enddo
+         
+      !Do gx*rho*xg part
+      
+      !Do gx*rho
+         call cem_quantum3_op_mxm(rho_r,tmp_r1,gx)
+         call cem_quantum3_op_mxm(rho_i,tmp_i1,gx)
+      
+         
+         do jj = 1,nstate_np
+            do ii = 1,nstate
+!         j0 = j0_array(kk)!(jj-1)*nstate+ii
+               j0 = (jj-1)*nstate+ii
+               tmprv(j0) = tmp_r1(ii,jj)
+               tmpiv(j0) = tmp_i1(ii,jj)
+            enddo
+         enddo
+         
+      !Transpose to get rho*xg
+         call gs_op_fields(gs_handle_q_H,tmprv,
+     $        nstate_p,1,1,1,0)
+         call gs_op_fields(gs_handle_q_H,tmpiv,nstate_p,1,1,1,0)
+         
+
+         do jj= 1,nstate_np
+            do kk = 1,nstate
+               if(jj+c_offset.eq.kk) then
+                  tmp_r1(kk,jj) = tmp_r1(kk,jj)
+                  tmp_i1(kk,jj) = -tmp_i1(kk,jj)
+               else
+                  j0 = (jj-1)*nstate+kk
+!We want b, so we take a+b-a
+                  tmp_r1(kk,jj) = tmprv(j0) - tmp_r1(kk,jj)
+!We want -b, so we take a - (a+b)
+                  tmp_i1(kk,jj) = tmp_i1(kk,jj) - tmpiv(j0)
+               endif
+            enddo
+         enddo        
+         
+!Do gx*(gx*rho)^\dagger
+         call cem_quantum3_op_mxm(tmp_r1,tmp_r2,gx)
+         call cem_quantum3_op_mxm(tmp_i1,tmp_i2,gx)
+         
+      !Add gx*(gx*rho)^\dagger to drho
+         do jj=1,nstate_np
+            do ii=1,nstate
+
+               tmpcc = tmp_r2(ii,jj) + ci*tmp_i2(ii,jj)
+               drho(ii,jj) = drho(ii,jj) -2*scalar*tmpcc
+
+            enddo
+         enddo
+      enddo
+      
+      do jj=1,nstate_np
+         do ii=1,nstate
+            resrho_r(ii,jj) = real(drho(ii,jj))
+            resrho_i(ii,jj) = imag(drho(ii,jj))
+         enddo
+      enddo
+
+c$$$      write(22,*) ' '
+c$$$      do ii=1,nstate
+c$$$         write(22,'(100g25.15)') (resrho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$      write(23,*) ' '
+c$$$      do ii=1,nstate
+c$$$         write(23,'(100g25.15)') (resrho_i(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$
+
+
 
       end
 
@@ -928,11 +1153,19 @@ c$$$       enddo
       complex ci,tmpcc,tmpGet(nstate)
       integer ii,jj,kk,i0,j0,ierr,iOp
       real tmprr,tmpii
-      real op(12,12)
       integer*8 target_disp !has to be integer*8 for MPI!
       !lnumqd = lin_max_ops
 
       ci = (0.0,1.0)
+c$$$      do jj=1,nstate_np
+c$$$         do kk=1,nstate
+c$$$            drho(kk,jj) = 0.0
+c$$$            rho(kk,jj)  = 1.0 + ci
+c$$$         enddo
+c$$$      enddo
+
+
+
 !      call MPI_BARRIER(MPI_COMM_WORLD,IERR)!Is this necessary?
       !Do opdag*op * rho + rho * opdag*op by utilizing the fact that
       !opdag * op is just the state - the sum of states, with gammas
@@ -949,6 +1182,7 @@ c$$$       enddo
          do jj=1,lin_l_length(iOp)
             i0 = lin_l_index(1,jj,iOp)
             j0 = lin_l_index(2,jj,iOp)
+            
             drho(i0,j0) = drho(i0,j0) + lin_l_a(jj,iOp)*
      $           rho(i0+lin_offset(iOp),j0+lin_offset(iOp))
          enddo
@@ -983,6 +1217,16 @@ c$$$       enddo
             resrho_i(ii,jj)= imag(drho(ii,jj))
          enddo
       enddo
+c$$$      write(20,*) ' '
+c$$$      do ii=1,nstate
+c$$$         write(20,'(100g25.15)') (resrho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+c$$$      write(21,*) ' '
+c$$$      do ii=1,nstate
+c$$$         write(21,'(100g25.15)') (resrho_i(ii,jj), jj=1,nstate)
+c$$$      enddo
+
+!      call exitt()
 
 
       return

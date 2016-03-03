@@ -1,0 +1,5 @@
+#!/bin/bash
+cp fort.11 data/spec_$1_nord
+cp fort.12 data/tdom_$1_nord
+cp fort.13 data/obs_$1_nord
+cp fort.16 data/ham_$1_nord

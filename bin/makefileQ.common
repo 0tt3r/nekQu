@@ -15,7 +15,8 @@ JL       = -DAMG_DUMP
 #
 CORE = driveQ.o \
 subuser.o comm_mpi2.o quantum_debug.o\
-quantum_csr.o quantum_setup.o quantum_time.o
+quantum_csr.o quantum_setup.o quantum_time.o\
+math_routines.o
 
 # defaul and overwrite: order is important: system > programming model     
 MXM = mxm_std.o mxm_wrapper.o
@@ -97,18 +98,18 @@ endif
 
 ################################################################################
 
-all : nekcem  print
+all : nekQ  print
 
-nekcem:	 $(NOBJS)          
-	 $(LD) $(OPT_OPTIONS) -o nekcem $G $(NOBJS) $(lFLAGS) 
+nekQ:	 $(NOBJS)          
+	 $(LD) $(OPT_OPTIONS) -o nekQ $G $(NOBJS) $(lFLAGS) 
 # -Bstatic
 
-print: nekcem  
-	@if which size &> /dev/null ; then size nekcem ; fi
+print: nekQ  
+	@if which size &> /dev/null ; then size nekQ ; fi
 	@echo "I am done" 
 
 clean:
-	rm *.o nekcem  
+	rm *.o nekQ  
 
 
 ################################################################################
@@ -122,7 +123,7 @@ comm_seq.o	:$S/comm_seq.F;		$(F77) -c $(FL2) $<
 mpi_dummy.o     :$S/mpi_dummy.F;	$(F77) -c $(FL2) $<
 byte_mpi.o      :$S/byte_mpi.F;         $(F77) -c $(FL2) $<
 subuser.o	:$S/subuser.F;		$(F77) -c $(FL2) $<
-
+math_routines.o :$S/math_routines.F;    $(F77) -c $(FL2) $<
 ################################################################################
 # NETLIB
 ################################################################################

@@ -114,10 +114,10 @@ if    test -d /lustre  ; then  # running on OLCF Cray
         echo "#PBS -l walltime=$REQ_WALLTIME,nodes=$3" >> $pbsfile
         echo "#PBS -j oe" >> $pbsfile
         echo " cd `pwd`">> $pbsfile
-        echo " aprun -n $CORECOUNT ./nekcem ">> $pbsfile
+        echo " aprun -n $CORECOUNT ./nekQ ">> $pbsfile
 
         #craypat: profiling below
-        #echo " aprun -n $CORECOUNT ./nekcem+pat ">> $pbsfile
+        #echo " aprun -n $CORECOUNT ./nekQ+pat ">> $pbsfile
 
         qsub $pbsfile
         rm $pbsfile
@@ -149,8 +149,8 @@ elif  test -d /bgsys; then  # running on BG/P
   mkdir -p vtk
   mkdir -p wake
 
-  echo "qsub  -n $CORECOUNT --mode c8 -A $PROJECT -t $REQ_WALLTIME -O $OUTFILE nekcem"
-  COBALTJOB=`qsub -n $CORECOUNT --mode c8 -A $PROJECT -t $REQ_WALLTIME -O $OUTFILE nekcem`
+  echo "qsub  -n $CORECOUNT --mode c8 -A $PROJECT -t $REQ_WALLTIME -O $OUTFILE nekQ"
+  COBALTJOB=`qsub -n $CORECOUNT --mode c8 -A $PROJECT -t $REQ_WALLTIME -O $OUTFILE nekQ`
   echo "=== cobalt job $COBALTJOB submitted to veas"   
   qstat -f |grep mmin
 
@@ -177,8 +177,8 @@ elif  test -d /bgsys; then  # running on BG/P
   mkdir -p vtk
   mkdir -p wake
 
-  echo "cqsub  -n $CORECOUNT -m vn -p $PROJECT -q $PROSIZE -e BG_MAPPING=TXYZ -t $REQ_WALLTIME -O $OUTFILE nekcem"
-  COBALTJOB=`cqsub -n $CORECOUNT -m vn -p $PROJECT -q $PROSIZE -e BG_MAPPING=TXYZ -t $REQ_WALLTIME -O $OUTFILE nekcem`
+  echo "cqsub  -n $CORECOUNT -m vn -p $PROJECT -q $PROSIZE -e BG_MAPPING=TXYZ -t $REQ_WALLTIME -O $OUTFILE nekQ"
+  COBALTJOB=`cqsub -n $CORECOUNT -m vn -p $PROJECT -q $PROSIZE -e BG_MAPPING=TXYZ -t $REQ_WALLTIME -O $OUTFILE nekQ`
   echo "=== cobalt job $COBALTJOB submitted"   
   qstat -f |grep mmin
   
@@ -218,7 +218,7 @@ elif test -d /fusion ; then
       CORECOUNT="`cat $PBS_NODEFILE | wc -l`"
     fi
     echo "*** running on fusion with $CORECOUNT nodes"
-    mpirun -np $CORECOUNT -machinefile $PBS_NODEFILE ./nekcem
+    mpirun -np $CORECOUNT -machinefile $PBS_NODEFILE ./nekQ
   else
     echo "*** running on fusion in non-interactive mode"
         if ! pbsfile=`mktemp $SESSION.XXXXXX` ; then
@@ -257,7 +257,7 @@ elif test -d /fusion ; then
         echo "#PBS -N $sess" >> $pbsfile
         echo 'export NN=`wc -l $PBS_NODEFILE | awk \
              '\''{print $1}'\''` ' >> $pbsfile
-        echo 'EXE=$PBS_O_WORKDIR/nekcem' >> $pbsfile
+        echo 'EXE=$PBS_O_WORKDIR/nekQ' >> $pbsfile
         echo 'mpirun -np $NN -wd $PBS_O_WORKDIR \
               -machinefile $PBS_NODEFILE $EXE ' >> $pbsfile
 
@@ -266,7 +266,7 @@ elif test -d /fusion ; then
         rm $pbsfile
 
         #qsub -l nodes=$CORECOUNT -l walltime=$REQ_WALLTIME \
-        #-j oe -m abe -N $SESSION $SUBMIT_ARGS nekcem  
+        #-j oe -m abe -N $SESSION $SUBMIT_ARGS nekQ  
   fi
   qstat -a|grep mmin
 
@@ -293,9 +293,9 @@ else
 
   echo "Job to be submitted with np=$1 "
   if test "$DBG" = ""; then
-    mpiexec -np $1 ./nekcem $OUTFILE > $OUTFILE.np=$2.output
+    mpiexec -np $1 ./nekQ $OUTFILE > $OUTFILE.np=$2.output
   else
-    mpiexec -np $1 xterm -e $DBG ./nekcem #$OUTFILE > $OUTFILE.np=$2.output  
+    mpiexec -np $1 xterm -e $DBG ./nekQ #$OUTFILE > $OUTFILE.np=$2.output  
   fi
 
 

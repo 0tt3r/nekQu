@@ -1,4 +1,4 @@
-       common /QPRAMI/ iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
+       Common /QPRAMI/ iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
      $                , newHandleNumber,quantN,numberOfOps,nTimeDep
      $                , numberOfLinOps,c_offset,max_time_dep
@@ -43,12 +43,12 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , ham_ja(maxN*maxN/lp)
      $               , state(maxOp,maxN),initIndex(maxOp,2),oldN(maxOp)
      $               , levels(maxOp),obs_handle(maxOp)
-     $               , lin_offset(maxOp/4)
-     $               , lin_l_index(2,maxN*maxN/lp,maxOp/4)
-     $               , lin_nl_index(2,maxN,maxN/lp,maxOp/4)
-     $               , lin_target(maxN,maxOp/4)
-     $               , lin_l_length(maxOp/4),lin_nl_col_length(maxOp/4)
-     $               , lin_nl_length(maxN,maxOp/4),lin_tiling_N(maxOp/4)
+     $               , lin_offset(maxOp/2),lin_mxm_op(2,maxOp/2)
+     $               , lin_l_index(2,maxN*maxN/lp,maxOp/2)
+     $               , lin_nl_index(2,maxN,maxN/lp,maxOp/2)
+     $               , lin_target(maxN,maxOp/2)
+     $               , lin_l_length(maxOp/2),lin_nl_col_length(maxOp/2)
+     $               , lin_nl_length(maxN,maxOp/2),lin_tiling_N(maxOp/2)
      $               , op_csr_ia(maxN+1,maxOp),ham_i_ia(maxN+1)
      $               , ham_i_ja(maxN*maxN/lp),ham_d_ja(maxN*maxN/lp)
      $               , op_csr_ja(maxN*10,maxOp),ham_d_ia(maxN+1)
@@ -63,22 +63,27 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , quantum_gate_csr_ja(2*maxN,maxOp)
      $               , quantum_gate(maxTimeSteps),gates_table(6,maxOp) !6 is because there are 6 basic quantum gates
      $               , cnot_table(maxOp,maxOp)
-     $               , crk_table(maxOp,maxOp,maxOp)
+     $               , crk_table(maxOp,maxOp,maxOp),first_handle(maxOp)
+
        integer         iwork,ham_ia,ham_ja
      $               , oldN,state
      $               , levels,obs_handle,initIndex,lin_target
      $               , lin_nl_index
      $               , lin_l_length,lin_nl_col_length,lin_nl_length
-     $               , lin_offset,lin_l_index,lin_tiling_N,ham_i_ia
+     $               , lin_offset, lin_mxm_op
+     $               , lin_l_index,lin_tiling_N,ham_i_ia
      $               , op_csr_ia,op_csr_ja,ham_i_ja,ham_d_ja,ham_d_ia
      $               , vec_state,vec_to_op,vec_state2
      $               , j0_array,obs_csr_ia,obs_csr_ja,handle_to_op
      $               , quantum_gate_coo_ia,quantum_gate_coo_ja
      $               , quantum_gate_csr_ia,quantum_gate_csr_ja
      $               , quantum_gate,gates_table,cnot_table,crk_table
+     $               , first_handle
 
        common /QPRAMLO/ rwa,calc_concurrence,ifPulse,useGates
+     $               ,  is_vec(maxOp),ham_finalized
        logical          rwa,calc_concurrence,ifPulse,useGates
+     $               ,  is_vec,ham_finalized
 
        common /QPRAMI8/ lin_disp(maxN,maxOp)
        integer*8        lin_disp
@@ -89,8 +94,8 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
        common /QPRAMV/ work(maxN + 21*2*maxN*maxN/lp)
      $               , ham_i(maxN*maxN/lp),ham_d(maxN*maxN/lp)
      $               , ham_a(maxN*maxN/lp),omega_quant(maxE)
-     $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/lp,maxOp/4)
-     $               , lin_nl_a(maxN,maxN/lp,maxOp/4)
+     $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/lp,maxOp/2)
+     $               , lin_nl_a(maxN,maxN/lp,maxOp/2),lin_mxm_a(maxOp/2)
      $               , op_csr_a(maxN*10,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
      $               , tmprv(maxN*maxN/lp)
      $               , tmpiv(maxN*maxN/lp)
@@ -99,7 +104,7 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , observable(maxOp),obs_csr_a(maxN*10,maxOp/4)
      $               , quantum_gate_times(maxTimeSteps)
 
-       real            work,ham_i,ham_d,ham_a
+       real            work,ham_i,ham_d,ham_a,lin_mxm_a
      $               , lin_nl_a,lin_l_a,lin_scalar,obs_scalar
      $               , omega_quant, op_csr_a,tmprv,tmpiv,pop_time
      $               , obs_time, observable,obs_csr_a
@@ -132,3 +137,29 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
 
 
 
+!Exponential time stepping stuff below
+       common /qarnolV/
+     $   qU  (2*maxN*maxN)                   
+     $,  qV0 (2*maxN*maxN,larnol+1)
+     $,  qV  (2*maxN*maxN,larnol)
+     $,  qH0 (larnol+1,larnol)
+     $,  qH  (larnol,larnol)
+     $,  qW  (larnol)
+       real*8 qU,qV0,qV,qVt,qH0,qH,qW
+
+       common /qarnolI/ qmarnol
+       integer          qmarnol
+
+
+       common /qarnolW/ qws(2*larnol*(larnol+2))
+     $,                 qrwork(2*larnol)
+      real*8            qws,qrwork
+
+      common /qarnolC/  qeval(larnol),qzr(larnol,larnol)
+     $               ,  qzri(larnol,larnol)
+     $               ,  qzh(larnol,larnol),qzh2(larnol),qzh3(larnol)
+     $               ,  qawork(larnol)
+      complex*16        qeval,qzri,qzr,qzh,qzh2,qzh3,qawork
+
+      common /qarnolWI/  iqpiv(larnol)
+      integer            iqpiv

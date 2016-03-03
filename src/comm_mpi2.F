@@ -440,31 +440,31 @@ c     Communicate unhappiness to the other session
       if (nid.eq.0) then
 c        ifopen(unit=50,opened=ifopen)
 c        if(ifopen) close(50)
-         dtmp1 = 0
-         dtmp2 = 0
-         dtmp3 = 0
-         if(istep.gt.0) then
-           dgp   = nvtot
-           dgp   = max(dgp,1.)
-           dtmp1 = np*ttime/(dgp*max(istep,1))
-           dtmp2 = ttime/max(istep,1)
-c          dtmp3 = 1.*papi_flops/1e6
-         endif
+c$$$         dtmp1 = 0
+c$$$         dtmp2 = 0
+c$$$         dtmp3 = 0
+c$$$         if(istep.gt.0) then
+c$$$           dgp   = nvtot
+c$$$           dgp   = max(dgp,1.)
+c$$$           dtmp1 = np*ttime/(dgp*max(istep,1))
+c$$$           dtmp2 = ttime/max(istep,1)
+c$$$c          dtmp3 = 1.*papi_flops/1e6
+c$$$         endif
          write(6,*) ' '
          write(6,'(A)') 'call exitt: dying ...'
-         write(6,*) ' '
-         !call print_stack()
-         write(6,*) ' '
-         write(6,'(4(A,1p1e13.5,A,/))')
-     &       'total elapsed time             : ',ttotal, ' sec'
-     &      ,'total solver time incl. I/O    : ',ttime , ' sec'
-     &      ,'time/timestep                  : ',dtmp2 , ' sec'
-     &      ,'CPU seconds/timestep/gridpt    : ',dtmp1 , ' sec'
-#ifdef PAPI
-         write(6,'(2(A,1g13.5,/))')
-     &       'Gflops                         : ',dtmp3/1000.
-     &      ,'Gflops/s                       : ',papi_mflops/1000.
-#endif
+c$$$         write(6,*) ' '
+c$$$         !call print_stack()
+c$$$         write(6,*) ' '
+c$$$         write(6,'(4(A,1p1e13.5,A,/))')
+c$$$     &       'total elapsed time             : ',ttotal, ' sec'
+c$$$     &      ,'total solver time incl. I/O    : ',ttime , ' sec'
+c$$$     &      ,'time/timestep                  : ',dtmp2 , ' sec'
+c$$$     &      ,'CPU seconds/timestep/gridpt    : ',dtmp1 , ' sec'
+c$$$#ifdef PAPI
+c$$$         write(6,'(2(A,1g13.5,/))')
+c$$$     &       'Gflops                         : ',dtmp3/1000.
+c$$$     &      ,'Gflops/s                       : ',papi_mflops/1000.
+c$$$#endif
       endif
 
       !call flush_io

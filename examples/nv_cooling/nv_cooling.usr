@@ -1,0 +1,255 @@
+c----------------------------------------------------------------------
+c
+c  USER SPECIFIED ROUTINES:
+c
+c     - boundary conditions
+c     - initial conditions
+c     - variable properties
+c     - forcing function for fluid (f)
+c     - forcing function for passive scalar (q)
+c     - general purpose routine for checking errors etc.
+c
+c-----------------------------------------------------------------------
+      subroutine useriniQ
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'mpif.h'
+
+      integer x(3),xx,yy,xy,yx,gx,xg,yg,gy,a,at,an
+      integer yt_x,xt_y,y_a_yt,a_at,yg_a_gy
+      integer num_vib,xy_a_yx,a_a_at,sig_perp
+      integer sig_par1,sig_par2,sig_0,xx_a_yy
+      real MHz,GHz,Gamma,Gamma_phi,Delta,omega_m,lambda_par
+      real lambda_perp,lambda_0,Q,N_th,delta_l,Omega,prefactor
+      !Read the simple input
+c$$$      if(nid.eq.0) then
+c$$$      open(unit=2,file='quantInput')
+c$$$      read(2,*) fluence,g_couple,g_couple2,g_couple3
+c$$$      close(unit=2)
+c$$$      endif
+c$$$      call MPI_BCAST(fluence,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+c$$$      call MPI_BCAST(g_couple,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+c$$$      call MPI_BCAST(g_couple2,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+
+      MHz = 1e-6
+      GHz = 1e-3
+      pi          = 4.*ATAN(1.0)      
+
+      Gamma    = 2*pi*15*MHz
+      Gamma_phi = 15*MHz
+      Delta    = 1*GHz
+      omega_m = 2*pi*1*GHz
+      lambda_par = 2*pi*6*MHz
+      lambda_perp = 2*pi*6*MHz
+      lambda_0 = 2*pi*6*MHz
+      Q = 10**5
+      N_th = 100
+      delta_l = -omega_m
+      Omega = Gamma
+
+
+
+      timeunit         = 2.418884326505e-17 ! hbar/Eh(hartree) SI unit
+      timemax          = 2.5e-13/timeunit
+
+      timeunit    = 1e-3    ! nanoseconds?
+      timemax     = 1/timeunit
+      nqstep      = 50
+
+      num_vib = 2 
+
+      call quantum_setup_initialize()
+
+      pulse_t_0        = 0.001/timeunit
+      pulse_omega_0    = omega
+      ifPulse          = .true.
+      rwa              = .true.
+      calc_concurrence = .false.
+      useGates         = .false.
+
+
+!     x is an array of size 3, with x(1) representing [1 0 0], x(2) representing [0 1 0],
+!     and x(3) representing [0 0 1]
+
+ 
+      call quantum_create_op(num_vib,a,at,an) 
+      call quantum_create_vec(3,x) 
+
+      call quantum_finalize_op_csr()
+
+
+      call quantum_combine_vec(x(2),x(2),yy)
+
+      call quantum_combine_vec(x(3),x(3),xx)
+
+      call quantum_combine_vec(x(2),x(3),yx)
+
+      call quantum_combine_vec(x(3),x(2),xy)
+
+      call quantum_combine_vec(x(2),x(1),yg)
+
+      call quantum_combine_vec(x(1),x(2),gy)
+
+      call quantum_combine_vec(x(3),x(1),xg)
+
+      call quantum_combine_vec(x(1),x(3),gx)
+
+c$$$      call quantum_print_csr(gx)
+c$$$      print*,'xx',yy,gy
+c$$$      call quantum_print_csr(xx)
+      
+      call quantum_combine_op_csr(yg,gy,0,yg_a_gy)
+      call quantum_combine_op_csr(a,at,1,a_at)
+      !Oscillator terms
+      !call quantum_add_to_ham_csr(an,omega_m,0)      
+      !call quantum_add_to_ham_csr(yy,-delta_l,0)
+      !call quantum_add_to_ham_csr(xx,-(delta_l-delta),0)
+
+      !Laser term
+      !call quantum_add_to_ham_csr(yg_a_gy,omega/2,1)
+
+      !Sigma_par term = (xx - yy) (a+a^\dagger)
+      call quantum_combine_op_csr(a,at,0,a_a_at)
+      call quantum_combine_op_csr(xx,a_a_at,1,sig_par1)
+      call quantum_combine_op_csr(yy,a_a_at,1,sig_par2)
+      !call quantum_add_to_ham_csr(sig_par1,lambda_par,0)      
+      !call quantum_add_to_ham_csr(sig_par2,-lambda_par,0)      
+
+      !Sigma_0 term = (xx + yy)(a+a^\dagger)
+      call quantum_combine_op_csr(xx,yy,0,xx_a_yy)
+      call quantum_combine_op_csr(xx_a_yy,a_a_at,1,sig_0)
+      !call quantum_add_to_ham_csr(sig_0,lambda_0,0)      
+
+      !Sigma_perp term = (xy + yx) (a + a^\dagger)
+      call quantum_combine_op_csr(gx,xg,0,xy_a_yx)
+      call quantum_combine_op_csr(xy_a_yx,a_a_at,1,sig_perp)      
+      call quantum_add_to_ham_csr(sig_perp,lambda_perp,0)      
+      call quantum_ham_finalize_csr()
+      call quantum_print_ham()
+!Lambda_Gamma terms
+
+!      call quantum_lin_add(gx,xx,-Gamma/2)
+      call quantum_lin_add(gy,yy,-Gamma/2)
+      call quantum_lin_add(xx,xx,-Gamma_phi/2)
+      call quantum_lin_add(yy,yy,-Gamma_phi/2)
+!      print*,'gamma',gamma
+!      print*,'gamma_phi',gamma_phi
+      prefactor = omega_m/(2*Q) *(N_th + 1)
+!      print*,'prefactor',prefactor
+      !Lambda_gamma terms
+      call quantum_lin_add(a,an,-prefactor)
+!      print*,'after lin_add'
+      prefactor = omega_m/(2*Q) *N_th
+      call quantum_lin_add(at,a_at,-prefactor)
+      !Lambda_gamma terms
+!      call quantum_lin_add_trans(a,an,-prefactor)
+!      print*,'after lin_add2'
+
+      call quantum_lin_finalize()
+      call cem_quantum3_propagation_rk
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine usertimedep(pulse)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      real pulse
+      real alpha
+
+      alpha = 2 * log(2.0)/ (pulse_duration)**2
+      if(rwa.eqv..true.) then
+         pulse = 100
+      else
+         pulse = energy0_pls/2.0*exp(-alpha*(time-pulse_t_0)**2)
+     $        *cos(pulse_omega_0*time)
+      endif
+
+!      if(nid.eq.1) then
+!      print*,'1',time*timeunit,pulse
+ !     print*,'2',eps_med,c_speed,eesu_per_au,timeunit,pi,time
+
+!      endif
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'QUANT'
+
+
+c ... compute errors
+
+
+      if (iqstep.le.10.or.mod(iqstep,100).eq.0) then
+
+c$$$        cpu_t1  = glsum(qrtime1,1)/(np*iqstep) ! total cpu/(np*iqstep)
+c$$$        cpu_t2  = glsum(qrtime2,1)/(np*iqstep) ! hamiltonian/(np*iqstep)
+c$$$        cpu_t3  = glsum(qrtime3,1)/(np*iqstep) ! linblad/(np*iqstep)
+c$$$        cpu_t4  = glsum(qrtime4,1)/(np) ! fourier/(np)
+c$$$
+c$$$        comm_t1 = glsum(qctime1,1)/(np*iqstep) ! total gs_op/(np*iqstep)
+c$$$        comm_t3 = glsum(qctime3,1)/(np*iqstep) ! total get  /(np*iqstep)
+
+        if (nid.eq.0) then
+
+        if(iqstep.eq.1) write(6,*)'iqstep nstate
+     $gs_op get total ham lin fourier gs_op get total ham lin fourier'
+         write(6,91) iqstep,nstate, 
+     $               qctime1,qctime3,
+     $               qrtime1,qrtime2, qrtime3, qrtime4,
+     $               comm_t1,comm_t3,              
+     $               cpu_t1,cpu_t2,cpu_t3,cpu_t4              
+
+ 91      format(/,i10,i10,12e10.3,' CPU: L2  '  )
+
+        endif ! nid=0
+      endif
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine userchk_acc
+      include 'SIZE'
+      include 'QUANT'
+
+
+c ... compute errors
+
+
+      if (iqstep.le.10.or.mod(iqstep,100).eq.0) then
+
+c$$$        cpu_t1  = glsum(qrtime1,1)/(np*iqstep) ! total cpu/(np*iqstep)
+c$$$        cpu_t2  = glsum(qrtime2,1)/(np*iqstep) ! hamiltonian/(np*iqstep)
+c$$$        cpu_t3  = glsum(qrtime3,1)/(np*iqstep) ! linblad/(np*iqstep)
+c$$$        cpu_t4  = glsum(qrtime4,1)/(np) ! fourier/(np)
+c$$$
+c$$$        comm_t1 = glsum(qctime1,1)/(np*iqstep) ! total gs_op/(np*iqstep)
+c$$$        comm_t3 = glsum(qctime3,1)/(np*iqstep) ! total get  /(np*iqstep)
+
+        if (nid.eq.0) then
+
+        if(iqstep.eq.1) write(6,*)'iqstep level numqd numsp nstate
+     $gs_op get total ham lin fourier gs_op get total ham lin fourier'
+         write(6,91) iqstep, level,numqd,numsp,nstate, 
+     $               qctime1,qctime3,
+     $               qrtime1,qrtime2, qrtime3, qrtime4,
+     $               comm_t1,comm_t3,    
+     $               cpu_t1,cpu_t2,cpu_t3,cpu_t4    
+
+ 91      format(/,i10,3i7,i10,12e10.3,' CPU: L2  '  )
+
+        endif ! nid=0
+      endif
+
+      return
+      end 
+
+c-----------------------------------------------------------------------

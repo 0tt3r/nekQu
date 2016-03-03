@@ -427,6 +427,28 @@ c  reshift iao and leave
       iao(1) = ipos
       end
 
+
+!**********************************************************************
+      subroutine cem_quantum3_op_mxm(rrho,tmprr,handle)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer handle,ii,jj,ierr
+      real*8  rrho (maxN,maxN/lp)
+      real*8  tmprr(maxN,maxN/lp)
+
+      if(handle.lt.0.or.handle.gt.newHandleNumber) then
+         print*,handle,' is not a valid handle for operator.'
+         return
+      endif
+
+      call cem_quantum3_csr_mxm(rrho,tmprr,op_csr_a(1,handle),
+     $     op_csr_ia(1,handle),op_csr_ja(1,handle))
+
+      return
+      end
+
 c---------------------------------------------------------------------
       subroutine cem_quantum3_csr_mxm(rrho,tmprr,mat_a,mat_ia,mat_ja)
 c---------------------------------------------------------------------
@@ -691,7 +713,6 @@ c
                stop
                return
             end if
-c            print*,i,j,a(k)
             dns(i,j) = a(k)
  3       continue
  4    continue
