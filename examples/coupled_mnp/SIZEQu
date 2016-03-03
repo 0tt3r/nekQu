@@ -1,0 +1,13 @@
+c     Dimension file to be included     
+                                        
+c     Arrays for Quantum Model calculations
+      integer    maxTimeSteps,maxN,maxOp,maxE,lp,nid 
+      parameter (maxTimeSteps = 10000) ! Max number of time steps
+      parameter (maxN    = 1024 )       ! Max Hilbert space size 
+      parameter (maxOp   = 60  )       ! Max number of operators
+      parameter (maxE    = 1000 )       ! Max number of energy slices
+      parameter (lp      = 8  )       ! Max number of processors
+
+      COMMON /DIMN/
+     $           NID
+
