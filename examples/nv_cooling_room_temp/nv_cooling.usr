@@ -1,0 +1,360 @@
+c----------------------------------------------------------------------
+c
+c  USER SPECIFIED ROUTINES:
+c
+c     - boundary conditions
+c     - initial conditions
+c     - variable properties
+c     - forcing function for fluid (f)
+c     - forcing function for passive scalar (q)
+c     - general purpose routine for checking errors etc.
+c
+c-----------------------------------------------------------------------
+      subroutine useriniQ
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'mpif.h'
+
+      !Create variables to store operators
+      !p = +, m = -
+      !gpgp => |g+><g+|, gmgm => |g-><g-|, g0g0 => |g0><g0|, etc
+      !nv hold all the vector state:
+      !nv(1) = |g+> = gp, nv(2)=|g0>=g0, nv(3)=|g->=gm
+      !nv(4) = |e+> = ep, nv(5)=|e0>=e0, nv(6)=|e->=em
+      !nv(7) = |s>  = s
+      integer nv(7),gp,g0,gm,ep,e0,em,s
+      integer gpgp,epep,e0e0,emem,ss,g0gm,gmg0,gmgp,gpgm
+      integer emep,epem,epgp,e0g0,gmem,gpep,emgm,gmgm,g0g0
+      integer sep,sem,gms,gps,g0e0,se0,g0s,g0gp,gpg0
+      integer a,at,an,a_at,a_p_at
+      integer sig_g1,sig_g2,sig_e1,sig_e2
+      
+      
+      integer N_th,num_phon !number of phonons
+      !parameters
+      real w_m,E_e,E_s,D_e,Omega,gamma_opt,lambda_g,lambda_e
+      real k42,k31,k45,k35,k52,k51,Tg2,Te2,Tg1,Q,prefactor
+
+      !Units
+      real kHz,MHz,GHz,THz,ns,us
+      !Read the simple input
+c$$$      if(nid.eq.0) then
+c$$$      open(unit=2,file='quantInput')
+c$$$      read(2,*) fluence,g_couple,g_couple2,g_couple3
+c$$$      close(unit=2)
+c$$$      endif
+c$$$      call MPI_BCAST(fluence,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+c$$$      call MPI_BCAST(g_couple,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+c$$$      call MPI_BCAST(g_couple2,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+      GHz = 1.519827e-7 !In AU
+      MHz = GHz*1e-3
+      kHz = MHz*1e-3
+      THz = GHz*1e3
+      pi          = 4.*ATAN(1.0)      
+
+      
+      timeunit= 2.418884326505e-17 !in a.u.
+      ns = 1e-9/timeunit
+      us = 1e-6/timeunit
+      
+      w_m = 1*GHz !Mechanical resonator frequency
+      E_e = 480*THz !NV center excited state energy
+      E_s = 370*THz !Nv center singlet energy
+      D_e = 1.52*GHz !NV excited state zero field splitting
+      Omega = 10*MHz !Magnetic driving field
+      gamma_opt = 100*MHz !Optical pumping rate
+      lambda_g = 300*kHz !Ground state spin-strain coupling
+      lambda_e = 10*lambda_g   !Excited state spin-strain coupling
+      k42 = 65.3*MHz !Relaxation from excited to ground
+      k31 = 64.9*MHz !Relaxation from excited to ground
+      k45 = 79.8*MHz !Relaxation from excited to singlet
+      k35 = 10.6*MHz !Relaxation from excited to singlet
+      k52 = 2.61*MHz !Relaxation from singlet to ground
+      k51 = 3.00*MHz !Relaxation from singlet to ground
+      Tg2 = 100*ns !Ground state longitudinal spin relaxation
+      Te2 = 6*ns   !Excited state longitudinal spin relaxation
+      Tg1 = 100*us !Ground state transverse spin relaxation
+      Q   = 10**6  !Mechanical resonator quality factor
+      Q   = 10**13 !Q factor artifical - 3 phonons
+
+      N_th = 6547 ! Room temperature
+      N_th = 100   !Very cold
+
+      
+!Initial state 1/3 1/3 1/3 in ground state 10 in phonon
+!     For n=16
+!      timemax     = 0.0003e-6/timeunit
+!      nqstep      = 90
+
+!       for n=32
+c$$$      timemax     = 0.3e-6/timeunit
+c$$$      nqstep      = 18000
+
+      timemax     = 0.05e-6/timeunit
+      nqstep      = 900
+
+      num_phon = 16
+
+      call quantum_setup_initialize()
+
+!     Create basic operators
+
+      call quantum_create_op(num_phon,a,at,an)  
+      call quantum_create_vec(7,nv)  
+
+
+      call quantum_finalize_op_csr()
+
+      gp = nv(1) !|g+>
+      g0 = nv(2) !|g0>
+      gm = nv(3) !|g->
+      ep = nv(4) !|e+>
+      e0 = nv(5) !|e0>
+      em = nv(6) !|e->
+      s  = nv(7) !|s>
+
+
+!     Combine vec operators to get terms for the hamiltonian/lindblad
+      call quantum_combine_vec(gp,gp,gpgp)
+      call quantum_combine_vec(ep,ep,epep)
+      call quantum_combine_vec(e0,e0,e0e0)
+      call quantum_combine_vec(em,em,emem)
+      call quantum_combine_vec(s,s,ss)
+      call quantum_combine_vec(g0,gm,g0gm)
+      call quantum_combine_vec(gm,g0,gmg0)
+      call quantum_combine_vec(gm,gp,gmgp)
+      call quantum_combine_vec(gp,gm,gpgm)
+      call quantum_combine_vec(em,ep,emep)
+      call quantum_combine_vec(ep,em,epem)
+      call quantum_combine_vec(ep,gp,epgp)
+      call quantum_combine_vec(e0,g0,e0g0)
+      call quantum_combine_vec(gm,em,gmem)
+      call quantum_combine_vec(gp,ep,gpep)
+      call quantum_combine_vec(em,gm,emgm)
+      call quantum_combine_vec(gm,gm,gmgm)
+      call quantum_combine_vec(g0,g0,g0g0)
+      call quantum_combine_vec(s,ep,sep)
+      call quantum_combine_vec(s,em,sem)
+      call quantum_combine_vec(gm,s,gms)
+      call quantum_combine_vec(gp,s,gps)
+      call quantum_combine_vec(s,e0,se0)
+      call quantum_combine_vec(g0,s,g0s)
+      call quantum_combine_vec(g0,e0,g0e0)
+      call quantum_combine_vec(g0,gp,g0gp)
+      call quantum_combine_vec(gp,g0,gpg0)
+
+
+      call quantum_combine_op_csr(a,at,1,a_at)
+
+       !Oscillator terms
+      !w_m at a
+      call quantum_add_to_ham_csr(an,w_m,0)      
+      !w_m |g+><g+|
+      call quantum_add_to_ham_csr(gpgp,w_m,0)
+      !(E_e + w_m) |e+><e+|
+      call quantum_add_to_ham_csr(epep,(E_e+w_m),0)
+      !(E_e - D_e) |e0><e0|
+      call quantum_add_to_ham_csr(e0e0,(E_e-D_e),0)
+      !E_e |e-><e-|
+      call quantum_add_to_ham_csr(emem,E_e,0)
+      !E_s |s><s|
+      call quantum_add_to_ham_csr(ss,E_s,0)
+
+      !Magnetic field driving term Omega/2(|g0><g-| + |g-><g0|)
+      call quantum_add_to_ham_csr(g0gm,omega/2,0)
+      call quantum_add_to_ham_csr(gmg0,omega/2,0)
+
+      !Sigma_g term = lambda_g (|g-><g+| + |g+><g-|) (a+at)
+      call quantum_combine_op_csr(a,at,0,a_p_at)
+
+      call quantum_combine_op_csr(gmgp,a_p_at,1,sig_g1)
+
+      call quantum_combine_op_csr(gpgm,a_p_at,1,sig_g2)
+      call quantum_add_to_ham_csr(sig_g1,lambda_g,0)      
+      call quantum_add_to_ham_csr(sig_g2,lambda_g,0)      
+
+      !Sigma_e term = lambda_e (|e-><e+| + |e+><e-|)(a+at)
+      call quantum_combine_op_csr(emep,a_p_at,1,sig_e1)
+      call quantum_combine_op_csr(epem,a_p_at,1,sig_e2)
+      call quantum_add_to_ham_csr(sig_e1,lambda_e,0)      
+      call quantum_add_to_ham_csr(sig_e2,lambda_e,0)      
+
+
+      call quantum_ham_finalize_csr()
+
+      !Lindblad terms
+      !L_{i,f} = -2*|f><i|rho|i><f| + |i><i|rho + rho|i><i|
+      !Translated to lin add:
+      !      quantum_lin_add(|f><|i|,|i><i|,scalar)
+
+      !Gamma_opt terms
+      !-Gamma_opt/2 * sum_{i=+,0,-} L_{gi,ei}
+      call quantum_lin_add(epgp,gpgp,-gamma_opt/2)
+      call quantum_lin_add(emgm,gmgm,-gamma_opt/2)
+      call quantum_lin_add(e0g0,g0g0,-gamma_opt/2)
+      
+      !k42 terms
+      !-k42/2 * sum_{i=+,-} L_{ei,gi}
+      call quantum_lin_add(gpep,epep,-k42/2)
+      call quantum_lin_add(gmem,emem,-k42/2)
+
+      !k45 terms
+      !-k45/2 * sum_{i=+,-} L_{ei,s}
+      call quantum_lin_add(sem,emem,-k42/2)
+      call quantum_lin_add(sep,epep,-k42/2)
+
+      !k52 terms
+      !-k52/2 * sum_{i=+,-} L_{s,gi}
+      call quantum_lin_add(gms,ss,-k52/2)
+      call quantum_lin_add(gps,ss,-k52/2)
+
+      !k31 term
+      !-k31/2 L_{e0,g0}
+      call quantum_lin_add(g0e0,e0e0,-k31/2)
+
+      !k35 term
+      !-k35/2 L_{e0,s}
+      call quantum_lin_add(se0,e0e0,-k35/2)
+
+      !k51 term
+      !-k51/2 L_{s,g0}
+      call quantum_lin_add(g0s,ss,-k51/2)
+
+      !T^g_2 term
+      !-1/(2*T^g_2) sum_{i=g+,g-} L_{i,i}
+      call quantum_lin_add(gpgp,gpgp,-1/(2*tg2))
+      call quantum_lin_add(gmgm,gmgm,-1/(2*tg2))
+      
+      !T^e_2 term
+      !-1/(2*T^e_2) sum_{i=e+,e-} L_{i,i}
+      call quantum_lin_add(epep,epep,-1/(2*te2))
+      call quantum_lin_add(emem,emem,-1/(2*te2))
+
+      !T^g_1 term
+      !-1/(2*T^g_1) sum_{i=+,0,-} sum_{j=+,0,-} (1-delta_ij) L_{gi,gj}
+      call quantum_lin_add(gpgm,gmgm,-1/(2*tg1))
+      call quantum_lin_add(gpg0,g0g0,-1/(2*tg1))
+      call quantum_lin_add(g0gp,gpgp,-1/(2*tg1))
+      call quantum_lin_add(g0gm,gmgm,-1/(2*tg1))
+      call quantum_lin_add(gmgp,gpgp,-1/(2*tg1))
+      call quantum_lin_add(gmg0,g0g0,-1/(2*tg1))
+
+      !Mechanical resonator dissipation
+      prefactor = w_m/(2*Q)*(N_th+1)
+      call quantum_lin_add(a,an,-prefactor)
+!      print*,'after lin_add'
+      prefactor = w_m/(2*Q) *N_th
+      call quantum_lin_add(at,a_at,-prefactor)
+
+!      call quantum_lin_add_trans(a,an,-prefactor)
+!      print*,'after lin_add2'
+
+      call quantum_lin_finalize()
+!      call cem_quantum3_propagation_exp
+      call cem_quantum3_propagation_rk
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine usertimedep(pulse)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      real pulse
+      real alpha
+
+      alpha = 2 * log(2.0)/ (pulse_duration)**2
+      if(rwa.eqv..true.) then
+         pulse = 100
+      else
+         pulse = energy0_pls/2.0*exp(-alpha*(time-pulse_t_0)**2)
+     $        *cos(pulse_omega_0*time)
+      endif
+
+!      if(nid.eq.1) then
+!      print*,'1',time*timeunit,pulse
+ !     print*,'2',eps_med,c_speed,eesu_per_au,timeunit,pi,time
+
+!      endif
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine userchk
+      include 'SIZE'
+      include 'QUANT'
+
+
+c ... compute errors
+
+
+      if (iqstep.le.10.or.mod(iqstep,100).eq.0) then
+
+c$$$        cpu_t1  = glsum(qrtime1,1)/(np*iqstep) ! total cpu/(np*iqstep)
+c$$$        cpu_t2  = glsum(qrtime2,1)/(np*iqstep) ! hamiltonian/(np*iqstep)
+c$$$        cpu_t3  = glsum(qrtime3,1)/(np*iqstep) ! linblad/(np*iqstep)
+c$$$        cpu_t4  = glsum(qrtime4,1)/(np) ! fourier/(np)
+c$$$
+c$$$        comm_t1 = glsum(qctime1,1)/(np*iqstep) ! total gs_op/(np*iqstep)
+c$$$        comm_t3 = glsum(qctime3,1)/(np*iqstep) ! total get  /(np*iqstep)
+
+        if (nid.eq.0) then
+
+        if(iqstep.eq.1) write(6,*)'iqstep nstate
+     $gs_op get total ham lin fourier gs_op get total ham lin fourier'
+         write(6,91) iqstep,nstate, 
+     $               qctime1,qctime3,
+     $               qrtime1,qrtime2, qrtime3, qrtime4,
+     $               comm_t1,comm_t3,              
+     $               cpu_t1,cpu_t2,cpu_t3,cpu_t4              
+
+ 91      format(/,i10,i10,12e10.3,' CPU: L2  '  )
+
+        endif ! nid=0
+      endif
+
+      return
+      end
+
+c-----------------------------------------------------------------------
+      subroutine userchk_acc
+      include 'SIZE'
+      include 'QUANT'
+
+
+c ... compute errors
+
+
+      if (iqstep.le.10.or.mod(iqstep,100).eq.0) then
+
+c$$$        cpu_t1  = glsum(qrtime1,1)/(np*iqstep) ! total cpu/(np*iqstep)
+c$$$        cpu_t2  = glsum(qrtime2,1)/(np*iqstep) ! hamiltonian/(np*iqstep)
+c$$$        cpu_t3  = glsum(qrtime3,1)/(np*iqstep) ! linblad/(np*iqstep)
+c$$$        cpu_t4  = glsum(qrtime4,1)/(np) ! fourier/(np)
+c$$$
+c$$$        comm_t1 = glsum(qctime1,1)/(np*iqstep) ! total gs_op/(np*iqstep)
+c$$$        comm_t3 = glsum(qctime3,1)/(np*iqstep) ! total get  /(np*iqstep)
+
+        if (nid.eq.0) then
+
+        if(iqstep.eq.1) write(6,*)'iqstep level numqd numsp nstate
+     $gs_op get total ham lin fourier gs_op get total ham lin fourier'
+         write(6,91) iqstep, level,numqd,numsp,nstate, 
+     $               qctime1,qctime3,
+     $               qrtime1,qrtime2, qrtime3, qrtime4,
+     $               comm_t1,comm_t3,    
+     $               cpu_t1,cpu_t2,cpu_t3,cpu_t4    
+
+ 91      format(/,i10,3i7,i10,12e10.3,' CPU: L2  '  )
+
+        endif ! nid=0
+      endif
+
+      return
+      end 
+
+c-----------------------------------------------------------------------
