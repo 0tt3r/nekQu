@@ -23,7 +23,7 @@ c-----------------------------------------------------------------------
       !nv hold all the vector state:
       !nv(1) = |g0> = g0, nv(2)=|e+>=ep, nv(3)=|e->=em
       integer num_nv
-      parameter (num_nv=5)
+      parameter (num_nv=4)
       integer nv(3,num_nv),g0(num_nv),ep(num_nv),em(num_nv)
       integer epep(num_nv),e0e0(num_nv),emem(num_nv),g0ep(num_nv)
       integer emep(num_nv),epem(num_nv),epg0(num_nv),g0em(num_nv)

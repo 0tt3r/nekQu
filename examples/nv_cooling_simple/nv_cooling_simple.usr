@@ -64,7 +64,7 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       D_e = 1.52*GHz !NV excited state zero field splitting
       Omega = 10*MHz !Magnetic driving field
       gamma_opt = 100*MHz !Optical pumping rate
-      lambda_e = 3*5**(0.5)*MHz
+      lambda_e = 3*3**(0.5)*MHz
       keg = 100*MHz !Relaxation from excited to ground
       Q   = 10**6  !Mechanical resonator quality factor
       Q   = 10**13 !Q factor artifical - 3 phonons
