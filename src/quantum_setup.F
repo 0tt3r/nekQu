@@ -1308,7 +1308,7 @@ c$$$      enddo
       if ((control.lt.1).or.(control.gt.totalQubits)) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'control qubit number doesn\'t make sense!'
+            print*,'control qubit number does not make sense!'
             print*,'Please use a number greater than 1 and less than the
      $total number of qubits'
          endif
@@ -1319,7 +1319,7 @@ c$$$      enddo
       if ((target.lt.1).or.(target.gt.totalQubits)) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'target qubit number doesn\'t make sense!'
+            print*,'target qubit number does not make sense!'
             print*,'Please use a number greater than 1 and less than the
      $total number of qubits'
          endif
@@ -1340,7 +1340,7 @@ c$$$      enddo
          if(nid.eq.0) then
             print*,'ERROR!'
             print*,'Having more qubits than the number of operators
-     $doesn\'t make any sense!'
+     $ does not make any sense!'
          endif
          call exitt()
       endif
@@ -1511,9 +1511,9 @@ c$$$         enddo
       if ((control.lt.1).or.(control.gt.totalQubits)) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'control qubit number doesn\'t make sense!'
+            print*,'control qubit number does not make sense!'
             print*,'Please use a number greater than 1 and less than the
-     $total number of qubits'
+     $ total number of qubits'
          endif
          call exitt()
       endif
@@ -1522,9 +1522,9 @@ c$$$         enddo
       if ((target.lt.1).or.(target.gt.totalQubits)) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'target qubit number doesn\'t make sense!'
+            print*,'target qubit number does not make sense!'
             print*,'Please use a number greater than 1 and less than the
-     $total number of qubits'
+     $ total number of qubits'
          endif
          call exitt()
       endif
@@ -1543,7 +1543,7 @@ c$$$         enddo
          if(nid.eq.0) then
             print*,'ERROR!'
             print*,'Having more qubits than the number of operators
-     $doesn\'t make any sense!'
+     $ does not make any sense!'
          endif
          call exitt()
       endif
@@ -1720,9 +1720,9 @@ c$$$
       if ((qubit.lt.1).or.(qubit.gt.totalQubits)) then
          if(nid.eq.0) then
             print*,'ERROR!'
-            print*,'qubit number doesn\'t make sense!'
+            print*,'qubit number does not make sense!'
             print*,'Please use a number greater than 1 and less than the
-     $total number of qubits'
+     $ total number of qubits'
          endif
          call exitt()
       endif
@@ -1732,7 +1732,7 @@ c$$$
          if(nid.eq.0) then
             print*,'ERROR!'
             print*,'Having more qubits than the number of operators
-     $doesn\'t make any sense!'
+     $ does not make any sense!'
          endif
          call exitt()
       endif
@@ -1745,7 +1745,7 @@ c$$$
             if(nid.eq.0) then
                print*,'ERROR!'
                print*,'Please enter gates in order of the time that 
-     $that they will be applied!'
+     $ that they will be applied!'
             endif
             call exitt()
          endif
