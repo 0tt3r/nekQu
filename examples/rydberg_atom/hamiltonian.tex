@@ -1,0 +1,55 @@
+\documentclass[12pt]{article}
+\usepackage{url,graphicx,tabularx,array,geometry,amsmath}
+\setlength{\parskip}{1ex} %--skip lines between paragraphs
+\setlength{\parindent}{0pt} %--don't indent paragraphs
+
+%-- Commands for header
+\renewcommand{\title}[1]{\textbf{#1}\\}
+\renewcommand{\line}{\begin{tabularx}{\textwidth}{X>{\raggedleft}X}\hline\\\end{tabularx}\\[-0.5cm]}
+\newcommand{\leftright}[2]{\begin{tabularx}{\textwidth}{X>{\raggedleft}X}#1%
+& #2\\\end{tabularx}\\[-0.5cm]}
+
+%\linespread{2} %-- Uncomment for Double Space
+\begin{document}
+
+\title{Rydberg Atom}
+\line
+\leftright{\today}{Matt Otten} %-- left and right positions in the header
+
+\section{Hamiltonian}
+
+\begin{equation}
+\frac{\mathrm{d} {\rho}}{\mathrm{d} t}
+= -\frac{i}{\hbar} [ \hat{H}, {\rho} ] +
+L({\rho}),
+\end{equation}
+in which $ \hat{H} $ is the Hamiltonian for the coupled system
+and $ L(\hat{\rho}) $ is a Lindblad superoperator providing 
+the resonator's decoherent thermal population. More explicitly,
+\begin{equation}\label{5_ham_terms}
+\hat{H} = \hbar \omega_r b^\dagger b + \hbar \omega_a a^\dagger a
++ \hbar \Omega (a^\dagger b + a b^\dagger) + d_b E(t) (b + b^\dagger)
++ d_a E(t) (a+a^\dagger)
+\end{equation}
+where $\omega_r = 5.4$GHz is the resonator frequency,
+$\omega_a = 5.5$GHz is the transition frequency of the atom,
+$\Omega = 3$MHz is the vacuum Rabi frequency,
+$d_b = $? and $d_a = $? are the transition dipole moments
+of the resonator and the atom, and  $ E(t) $ is the external electric field.
+
+Furthermore,
+\begin{equation}\label{5_lindblad_q}
+L(\hat{\rho}) =
+- \frac{\omega_r}{2Q}(N_{th} + 1)
+(b^{\dagger} b \hat{\rho}
++ \hat{\rho} b^{\dagger} b
+- 2 b \hat{\rho} b^{\dagger})
+- \frac{\omega_r}{2Q}N_{th}
+(b b^{\dagger} \hat{\rho}
++ \hat{\rho} b b^{\dagger}
+- 2 b^\dagger \rho b),
+\end{equation}
+where $N_{th}$ is the thermal phonon occupation, and $Q$ is the quality factor of the 
+resonator.
+
+\end{document}

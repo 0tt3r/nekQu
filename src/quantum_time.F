@@ -51,20 +51,18 @@ c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
 
+      if(nid.eq.0) rho_r(1,1) = 1
 !FIXME: Move density matrix initialization to user routine!
-      do ii=1,nstate_np
-         if(ii+c_offset.eq.levels(1)) then
-            rho_r(ii+c_offset,ii) = 1.0/3.0
-         endif
-         if(ii+c_offset.eq.2*levels(1)) then
-            rho_r(ii+c_offset,ii) = 1.0/3.0
-         endif
-         if(ii+c_offset.eq.3*levels(1)) then
-            rho_r(ii+c_offset,ii) = 1.0/3.0
-         endif
-      enddo
+c$$$      do ii=1,nstate_np
+c$$$         if(ii+c_offset.eq.levels(1)) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0/2.0
+c$$$         endif
+c$$$         if(ii+c_offset.eq.2*levels(1)) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0/2.0
+c$$$         endif
+c$$$      enddo
 !      rho_r(nstate,nstate) = 1.0
-c!$acc end parallel
+!$acc end parallel
 
 
 !      if(nid.eq.0) rho_r(2,2) = 1.0
@@ -87,7 +85,7 @@ c!$acc update device(resrho_i)
 
       dt           = timemax/(nqstep)
       printdt      = 1*dt
-      obsPrintSkip = 1000
+      obsPrintSkip = 1
       time    = 0
       timeOld = -1
 
@@ -309,7 +307,7 @@ c---------------------------------------------------------------------
       integer  iEh, ii
       real*8   dclock
       real*8    stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
-      complex  ci,en_t(nEh),obs_freq(maxOp,nEh)
+      complex  ci
 
    
       ci=(0.0,1.0)
@@ -324,7 +322,7 @@ c---------------------------------------------------------------------
       stime0= dclock()     
       stime1= dclock()
 
-      call cem_quantum3_propagation_init(obs_freq,en_t)
+      call cem_quantum3_propagation_init
 
       iqstep=1
       iiqstep = 1
@@ -337,7 +335,7 @@ c---------------------------------------------------------------------
             call quantum_apply_gates()
          endif
 
-         call cem_quantum3_observables(obs_freq,en_t)
+         call cem_quantum3_observables
          if(time.gt.timeOld) then
             call cem_quantum3_pop()
             timeOld = timeOld+printdt
@@ -359,7 +357,7 @@ c---------------------------------------------------------------------
       stime0 = dclock()-stime0
       if(nid.eq.0) write(6,*)'stime0:',stime0 
 
-      call cem_quantum3_propagation_finalize(en_t,obs_freq)
+      call cem_quantum3_propagation_finalize
 
       return
       end
@@ -524,13 +522,13 @@ c-----------------------------------------------------------------------
 
 
 c------------------------------------------------------------------
-      subroutine cem_quantum3_propagation_init(en_t,obs_freq)
+      subroutine cem_quantum3_propagation_init
 c------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'QUANT'
       integer ii,jj
-      complex  sig,en_t(nEh),obs_freq(maxOp,nEh)
+      complex  sig
 
       if(nqstep.gt.maxTimeSteps) then
          print*, 'ERROR!'
@@ -592,7 +590,7 @@ c---------------------------------------------------------------------
       integer  iEh, ii, IERR, jj,kk
       real*8     stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
       real*8   dclock,old_dt
-      complex  sig,en_t(nEh),obs_freq(maxOp,nEh),tmpc1,ci
+      complex  sig,tmpc1,ci
 
       ci=(0.0,1.0)
       stime0= 0.0          
@@ -606,7 +604,7 @@ c---------------------------------------------------------------------
       stime0= dclock()     
       stime1= dclock()
 
-      call cem_quantum3_propagation_init(obs_freq,en_t)
+      call cem_quantum3_propagation_init
       call cem_quantum3_rk_storage
 
 ccc Setup acc stuff
@@ -628,8 +626,8 @@ c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
 
        iqstep=1
        iiqstep = 1
-       old_dt = dt
-       dt     = dt/2
+!       old_dt = dt
+
        do while(time.lt.timemax)
           stime1= dclock()
          do ii= 1,5
@@ -649,15 +647,15 @@ c             dt=dt_small
 c         else
 c             dt=dt_large
 c         endif
-         if(time.gt.timemax/2) then
-            dt = old_dt
-         endif
+c$$$         if(time.gt.timemax/2) then
+c$$$            dt = old_dt
+c$$$         endif
          time= time+dt
          stime7= dclock()
          if(useGates.eqv..true.) then
             call quantum_apply_gates()
          endif
-         call cem_quantum3_observables(obs_freq,en_t)
+         call cem_quantum3_observables
          if(time.gt.timeOld) then
             call cem_quantum3_pop()
             timeOld = timeOld+printdt
@@ -686,7 +684,7 @@ c$$$      do ii=1,nstate
 c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
 c$$$      enddo
 
-      call cem_quantum3_propagation_finalize(en_t,obs_freq)
+      call cem_quantum3_propagation_finalize
 
 !$acc end data
 
@@ -695,7 +693,7 @@ c$$$      enddo
 
 
 c---------------------------------------------------------------------
-      subroutine cem_quantum3_propagation_finalize(en_t,obs_freq)
+      subroutine cem_quantum3_propagation_finalize
 c---------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -706,8 +704,8 @@ c---------------------------------------------------------------------
 
       integer  iEh, ii, IERR, jj,kk,number_pops
       real*8     sigr,sigi,tmpr,tmpi,rinc,sigcon,pulseFactor,fullPulse
-      real*8   dclock,c_speed,d_per_au,eesu_per_au,eps_med,eV
-      complex  sig,en_t(nEh),obs_freq(maxOp,nEh),tmpc1,ci
+      real*8   dclock,c_speed,d_per_au,eesu_per_au,eps_med,eV,GHz
+      complex  sig,tmpc1,ci,tmpc2
 
       tmpr = 0
 !Reduce the trace of rho as a sanity check - should always be 1!
@@ -765,58 +763,60 @@ c---------------------------------------------------------------------
 
 #endif
 
-
+      ci = (0.0,1.0)
       if(nid.eq.0) then
          time = dt
          kk = 1
          if(ifPulse.eqv..true.) then
-
+         do kk=1,nEh
+            if(nid.eq.0) print*,'en_t',en_t(kk)
+         enddo
+            
+            
             do ii=1,iqstep
                
                call usertimedep(pulseFactor)
-c     Now, do the fourier transform to save the value
-!     Envelope*oscillations --- consider putting oscillations in user control?
+
                if(rwa.eqv..true.) then
                   fullPulse = 2*pulseFactor*
      $                 cos(pulse_omega_0*(time-pulse_t_0))
                else
                   fullPulse = pulseFactor
                endif
+c     Now, do the fourier transform to save the value
+!     Envelope*oscillations --- consider putting oscillations in user control?
                
                do kk=1,nEh
                   en_t(kk) = en_t(kk)+fullPulse*
      $                 exp(ci*omega_quant(kk)*(time-pulse_t_0))
-                  
                   do jj=1,numObservables
                      obs_freq(jj,kk) = obs_freq(jj,kk) +  
      $                    (exp(ci*omega_quant(kk)*(time-pulse_t_0))*
      $                    obs_time(ii,jj))
                   enddo
-                  
+
                enddo
-!     write(13,12)time*timeunit
-!     $           ,(obs_time(ii,jj),jj=1,numObservables)
-               
                time = time + dt
             enddo
          endif
 
+         do kk=1,nEh
+            if(nid.eq.0) print*,omega_quant(kk)
+         enddo
          kk = 1
          time = dt
          do while(time.lt.timemax)
             if(ifPulse.eqv..true.) then
                call usertimedep(pulseFactor)
-c     Now, do the fourier transform to save the value
-!     Envelope*oscillations --- consider putting oscillations in user control?
                if(rwa.eqv..true.) then
                   fullPulse = 2*pulseFactor*
      $                 cos(pulse_omega_0*(time-pulse_t_0))
                else
                   fullPulse = pulseFactor
                endif
-               if(abs(pulseFactor).lt.1e-10) pulseFactor=0
+               if(abs(fullPulse).lt.1e-20) fullPulse = 0
 
-               write(13,12)time*timeunit,pulseFactor
+               write(13,12)time*timeunit,fullPulse
      $              ,(obs_time(kk,jj),jj=1,numObservables)
             else
                write(13,12)time*timeunit
@@ -848,7 +848,7 @@ c     Print out results
             eesu_per_au = 5.14220652d17 / c_speed
             eps_med     = 2.25
             eV       = 27.21140 ! energy Eh  
-            
+            GHz = 1!.519827e-7   !In AU
             do ii=1,nEh
                rinc = 4.0*pi*(omega_quant(ii)/timeunit)/
      $              (c_speed*eps_med**0.5)*
@@ -857,6 +857,8 @@ c     Print out results
                do jj=1,numObservables
                   sig = sig + obs_freq(jj,ii)
                enddo
+               tmpc2 = sig
+               print*,'sig ',sig
                sig  = rinc*sig/en_t(ii)
                rinc = 8.0d0*pi*(omega_quant(ii)/timeunit)**4/
      $              (3.0d0*c_speed**4)*
@@ -870,10 +872,12 @@ c     Print out results
 !     write(11,13) omega_quant(ii),en_t(ii),
 !     $        obs_freq(1,ii),obs_freq(2,ii)+
 !     $        obs_freq(3,ii)
-               write(11,13) eV*omega_quant(ii),sigi,sigr,sigr+sigi 
+               write(11,13) omega_quant(ii),sigi,sigr,sigr+sigi,
+     $              real(tmpc2),imag(tmpc2),real(en_t(ii)),
+     $              imag(en_t(ii))
             enddo
             
- 13         format(1p5e20.10)
+ 13         format(1p9e20.10)
          endif
          close(12)
          close(11)
@@ -1292,7 +1296,7 @@ c     Local only check (just for exploding values)
 
 c     global check
       call gop(pop,currentPop,'+  ',1)
-      if(nid.eq.0.and.abs(currentPop-1).gt.1e-13) then 
+      if(nid.eq.0.and.abs(currentPop-1).gt.1e-10) then 
          print*,'GLOBAL TRACE DIFFERENT THAN ONE'
          print*,'TRACE',currentPop
          stop
@@ -1331,7 +1335,7 @@ c$$$  #endif
 
 
 c--------------------------------------------------------------------
-      subroutine cem_quantum3_observables(obs_freq,en_t)
+      subroutine cem_quantum3_observables
 c--------------------------------------------------------------------
       implicit none
       include 'SIZE'
@@ -1343,7 +1347,6 @@ c--------------------------------------------------------------------
       complex*16 ci
       real*8     pulseFactor,fullPulse
       real     ttmp
-      complex  en_t(nEh),obs_freq(maxOp,nEh)!Update with variable
 
       ci = (0.0,1.0)
 
@@ -1374,10 +1377,31 @@ c$$$
          enddo
       enddo
 
-      
+
+c$$$      call usertimedep(pulseFactor)
+c$$$      if(rwa.eqv..true.) then
+c$$$         fullPulse = 2*pulseFactor*
+c$$$     $        cos(pulse_omega_0*(time-pulse_t_0))
+c$$$      else
+c$$$         fullPulse = pulseFactor
+c$$$      endif
+c$$$      
+c$$$      do kk=1,nEh
+c$$$         en_t(kk) = en_t(kk)+fullPulse*
+c$$$     $        exp(ci*omega_quant(kk)*(time-pulse_t_0))
+c$$$         do jj=1,numObservables
+c$$$            obs_freq(jj,kk) = obs_freq(jj,kk) +  
+c$$$     $           (exp(ci*omega_quant(kk)*(time-pulse_t_0))*
+c$$$     $           observable(jj))
+c$$$         enddo
+c$$$         
+c$$$      enddo
+
       do ii=1,numObservables
          obs_time(iqstep,ii) = observable(ii)
+
       enddo
+
 
 
 

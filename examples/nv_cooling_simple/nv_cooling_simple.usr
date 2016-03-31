@@ -64,13 +64,13 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       D_e = 1.52*GHz !NV excited state zero field splitting
       Omega = 10*MHz !Magnetic driving field
       gamma_opt = 100*MHz !Optical pumping rate
-      lambda_e = 3*3**(0.5)*MHz
+      lambda_e = 3*MHz
       keg = 100*MHz !Relaxation from excited to ground
       Q   = 10**6  !Mechanical resonator quality factor
-      Q   = 10**13 !Q factor artifical - 3 phonons
+      Q   = 10**12 !Q factor artifical - 3 phonons
 
       N_th = 6547 ! Room temperature
-      N_th = 100   !Very cold
+!      N_th = 100   !Very cold
 
       
 !Initial state 1/3 1/3 1/3 in ground state 10 in phonon
@@ -82,10 +82,10 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
 c$$$      timemax     = 0.3e-6/timeunit
 c$$$      nqstep      = 18000
 
-      timemax     = 1.0e-6/timeunit
-      nqstep      = 40000
+      timemax     = 1.5e-6/timeunit
+      nqstep      = 45000
 
-      num_phon = 16
+      num_phon = 8 
 
       call quantum_setup_initialize()
 

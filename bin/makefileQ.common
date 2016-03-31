@@ -63,7 +63,7 @@ HMT   = #-DHPM -Dr8 -DDEBUG -DMPISRC -DSINGLE_DIR # -DBLAS
 ###
 FL0   = $(L0) $(HMT) $(P)
 FL2   = $(L2) $(HMT) $(P)
-FL3   = $(L3) $(HMT) $(P) #-C -g 
+FL3   = $(L3) $(HMT) $(P) -C -g 
 FL4   = $(L4) $(HMT) $(P)
 
 ###

@@ -221,7 +221,7 @@
 
       integer ii,jj,kk,tilingNumber,maxLevel,curState
       integer mat_offset,op_num,mat_bound,tmp_sum1,tmp_sum2
-      real    value,dEh,eV
+      real    value,dEh,eV,GHz
       logical foundState,foundState2
 
       nstate    = quantN
@@ -302,10 +302,16 @@ c      print*,'after check two',nid
       
 
       eV       = 27.21140                ! energy Eh  
+      GHz = 1.519827e-7 !Temporary change to GHz
+
       dEh  = (Emax-Emin)/(nEh+1)     
       do ii=1,nEh
-         omega_quant(ii) = (Emin + ii*dEh)/eV
+         omega_quant(ii) = (Emin + ii*dEh)
       enddo
+
+c$$$      do ii=1,nEh
+c$$$         if(nid.eq.0) print*,omega_quant(ii)
+c$$$      enddo
 
       !Define the state_sums array for RWA
       if(rwa.eqv..true.) then
@@ -516,7 +522,7 @@ c$$$       enddo
 
       nzmax = maxN*maxN/lp
       
-      do ii=1,maxN*10 !Consider changing this size - but to what?
+      do ii=1,nzmax !Consider changing this size - but to what?
          ham_a(ii) = op_csr_a(ii,handle)*scalar
       enddo
       if(timeDep.eq.0) then
@@ -684,9 +690,12 @@ c$$$      end
       lin_mxm_a(iOp)    = scalar
       !FIXME: handle2/3 is dangerous - put a check or think of a better way!
       op_num = handle_to_op(handle2)
-
-      tilingNum = oldN(abs(op_num))
-
+      
+      if(op_num.gt.0) then
+         tilingNum = oldN(abs(op_num))
+      else
+         tilingNum = 0
+      endif
       if(tilingNum.eq.0) then !handle2 doesn't reference a base operator - will crash!
          if(nid.eq.0) then
             print*,'ERROR!'

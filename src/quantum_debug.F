@@ -5,7 +5,7 @@
       include 'SIZE'
       include 'QUANT'
       integer ii,jj,kk
-      complex  sig,en_t(nEh),obs_freq(10,nEh),tmpc1
+      complex  sig,tmpc1
 
       call cem_quantum3_initialize      
       call cem_quantum3_rk_storage
@@ -540,7 +540,7 @@ c$$$      enddo
       enddo
       time = time+dt
       iqstep = iqstep+1
-      call cem_quantum3_pop(obs_freq,en_t)
+      call cem_quantum3_pop
          if(time.gt.timeOld) then
             call cem_quantum3_pop()
             timeOld = timeOld+printdt

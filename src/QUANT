@@ -51,7 +51,7 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , lin_nl_length(maxN,maxOp/2),lin_tiling_N(maxOp/2)
      $               , op_csr_ia(maxN+1,maxOp),ham_i_ia(maxN+1)
      $               , ham_i_ja(maxN*maxN/lp),ham_d_ja(maxN*maxN/lp)
-     $               , op_csr_ja(maxN*10,maxOp),ham_d_ia(maxN+1)
+     $               , op_csr_ja(maxN*maxN/lp,maxOp),ham_d_ia(maxN+1)
      $               , j0_array(maxN*maxN/lp)
      $               , obs_csr_ia(maxN*10+1,maxOp)
      $               , obs_csr_ja(maxN*10,maxOp)
@@ -96,7 +96,7 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , ham_a(maxN*maxN/lp),omega_quant(maxE)
      $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/lp,maxOp/2)
      $               , lin_nl_a(maxN,maxN/lp,maxOp/2),lin_mxm_a(maxOp/2)
-     $               , op_csr_a(maxN*10,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
+     $               , op_csr_a(maxN*maxN/lp,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
      $               , tmprv(maxN*maxN/lp)
      $               , tmpiv(maxN*maxN/lp)
      $               , pop_time(maxTimeSteps,maxOp/3)
@@ -113,10 +113,12 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
        common /QPRAMC/ rho      (maxN,maxN/lp)
      $               , drho     (maxN,maxN/lp)
      $               , tmp_c1(maxN,maxN/lp)
+     $               , en_t(maxE)
+     $               , obs_freq(maxOp,maxE)
      $               , quantum_gate_coo_a(2*maxN)
      $               , quantum_gate_csr_a(2*maxN,maxOp)
 
-       complex        rho,drho,tmp_c1
+       complex        rho,drho,tmp_c1,en_t,obs_freq
      $               , quantum_gate_coo_a,quantum_gate_csr_a
 
        common /QPRAMW/ rho_r       (maxN,maxN/lp)
