@@ -7,6 +7,6 @@ a new file, 2plasmons.usr, and put the other system in there (within the same
 folder).
 
 
-To compile: ../../bin/makenekQ -a linux-gnu-pgi quantum_dot.usr
+To compile: ../../bin/makenekQ -a linux-gnu-mpi quantum_dot.usr
 To run:     ../../bin/nek 1
 
