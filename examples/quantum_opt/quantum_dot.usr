@@ -20,25 +20,27 @@ c-----------------------------------------------------------------------
       real op(160,160)
       real omega,g_couple,eV,gamma_di,gamma_pi,gamma_s,mu_s,mu_q
       real c_speed,d_per_au,eesu_per_au,eps_med,fluence,tmpint
-      real omega2,debye,omega3,radius,g_couple2,g_couple3
-      integer qd1,qd1t,qd1n,sp,spt,spn
+      real omega2,debye,omega3,radius,g_couple2,g_couple3,g_couple4
+      integer qd1,qd1t,qd1n,sp,spt,spn,numsp
       integer qd2,qd2t,qd2n,ii,jj,kk,j0
       integer qd1t_sp,qd1_spt,sp2,sp2t,sp2n
       integer qd2t_sp,qd2_spt,ierr,qd2t_sp2,qd2_sp2t
       integer qd1t_spt,qd1_sp,sp2_qd1t,sp2t_qd1
       integer qd1_a_qd1t,qd2_a_qd2t,sp_a_spt
       integer qd3,qd3t,qd3n,qd3_a_qd3t,qd3t_sp,qd3_spt
+      integer qd4,qd4t,qd4n,qd4_a_qd4t,qd4t_sp,qd4_spt
       
       !Read the simple input
       if(nid.eq.0) then
       open(unit=2,file='quantInput')
-      read(2,*) fluence,g_couple,g_couple2,g_couple3
+      read(2,*) fluence,g_couple,g_couple2,g_couple3,g_couple4
       close(unit=2)
       endif
       call MPI_BCAST(fluence,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       call MPI_BCAST(g_couple,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       call MPI_BCAST(g_couple2,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
+      call MPI_BCAST(g_couple4,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
 
       fluence = 0
       eV       = 27.21140                ! energy Eh  
@@ -49,7 +51,7 @@ c-----------------------------------------------------------------------
 
       gamma_pi = 1.9d-7/eV
       gamma_di = 2.0d-3/eV
-      gamma_s  = 1.5d-1/eV
+      gamma_s  = 1.0d-1/eV
 
       omega    = 2.05/eV    
       omega2   = 2.05/eV
@@ -57,6 +59,7 @@ c-----------------------------------------------------------------------
       g_couple  = g_couple*1e-3/eV
       g_couple2 = g_couple2*1e-3/eV
       g_couple3 = g_couple3*1e-3/eV
+      g_couple4 = g_couple4*1e-3/eV
 
       fluence = 0*fluence*1e-9*1e7
       pulse_omega_0 = 2.05/eV!omega
@@ -79,7 +82,7 @@ c-----------------------------------------------------------------------
       pi          = 4.*ATAN(1.0)
       pulse_duration = 2e-14/timeunit
       timemax     = 10e-13/timeunit
-      nqstep      = 10000
+      nqstep      = 5000
       pulse_t_0     = 1e-13/timeunit
       numsp       = 2 
       ltonq       = 2
@@ -98,8 +101,9 @@ c-----------------------------------------------------------------------
       calc_concurrence = .true.
       
       call quantum_create_op(2,qd1,qd1t,qd1n)
-      !call quantum_create_op(2,qd2,qd2t,qd2n)
-      !call quantum_create_op(2,qd3,qd3t,qd3n)
+      call quantum_create_op(2,qd2,qd2t,qd2n)
+      call quantum_create_op(2,qd3,qd3t,qd3n)
+      call quantum_create_op(2,qd4,qd4t,qd4n)
       call quantum_create_op(numsp,sp,spt,spn)
 
       call quantum_finalize_op_csr()
@@ -107,39 +111,49 @@ c-----------------------------------------------------------------------
       call quantum_combine_op_csr(qd1t,sp,1,qd1t_sp)
 
       call quantum_combine_op_csr(qd1,spt,1,qd1_spt)
-      !call quantum_combine_op_csr(qd2t,sp,1,qd2t_sp)
-      !call quantum_combine_op_csr(qd2,spt,1,qd2_spt)
+      call quantum_combine_op_csr(qd2t,sp,1,qd2t_sp)
+      call quantum_combine_op_csr(qd2,spt,1,qd2_spt)
 
-      !call quantum_combine_op_csr(qd3t,sp,1,qd3t_sp)
-      !call quantum_combine_op_csr(qd3,spt,1,qd3_spt)
+      call quantum_combine_op_csr(qd3t,sp,1,qd3t_sp)
+      call quantum_combine_op_csr(qd3,spt,1,qd3_spt)
+
+      call quantum_combine_op_csr(qd4t,sp,1,qd4t_sp)
+      call quantum_combine_op_csr(qd4,spt,1,qd4_spt)
 
       call quantum_combine_op_csr(qd1,qd1t,0,qd1_a_qd1t)
-      !call quantum_combine_op_csr(qd2,qd2t,0,qd2_a_qd2t)
-      !call quantum_combine_op_csr(qd3,qd3t,0,qd3_a_qd3t)
+      call quantum_combine_op_csr(qd2,qd2t,0,qd2_a_qd2t)
+      call quantum_combine_op_csr(qd3,qd3t,0,qd3_a_qd3t)
+      call quantum_combine_op_csr(qd4,qd4t,0,qd4_a_qd4t)
+
       call quantum_combine_op_csr(sp,spt,0,sp_a_spt)
       print*,'after combine op',nid      
       !Oscillator terms
-      !call quantum_add_to_ham_csr(qd3n,omega,0)
-      !call quantum_add_to_ham_csr(qd2n,omega,0)
+      call quantum_add_to_ham_csr(qd3n,omega,0)
+      call quantum_add_to_ham_csr(qd4n,omega,0)
+      call quantum_add_to_ham_csr(qd2n,omega,0)
       call quantum_add_to_ham_csr(qd1n,omega,0)      
       call quantum_add_to_ham_csr(spn,omega,0)
 
       !Driving terms
-      call quantum_add_to_ham_csr(qd1_a_qd1t,-mu_q,1)
-      !call quantum_add_to_ham_csr(qd2_a_qd2t,-mu_q,1)
-      !call quantum_add_to_ham_csr(qd3_a_qd3t,-mu_q,1)
-      call quantum_add_to_ham_csr(sp_a_spt,-mu_s,1)
+c$$$      call quantum_add_to_ham_csr(qd1_a_qd1t,-mu_q,1)
+c$$$      call quantum_add_to_ham_csr(qd2_a_qd2t,-mu_q,1)
+c$$$      call quantum_add_to_ham_csr(qd3_a_qd3t,-mu_q,1)
+c$$$      call quantum_add_to_ham_csr(sp_a_spt,-mu_s,1)
 
       !Coupling terms
       call quantum_add_to_ham_csr(qd1t_sp,-g_couple,0)
       call quantum_add_to_ham_csr(qd1_spt,-g_couple,0)
 
-      !call quantum_add_to_ham_csr(qd2t_sp,-g_couple2,0)
-      !call quantum_add_to_ham_csr(qd2_spt,-g_couple2,0)
+      call quantum_add_to_ham_csr(qd2t_sp,-g_couple2,0)
+      call quantum_add_to_ham_csr(qd2_spt,-g_couple2,0)
 
 
-      !call quantum_add_to_ham_csr(qd3t_sp,-g_couple3,0)
-      !call quantum_add_to_ham_csr(qd3_spt,-g_couple3,0)
+      call quantum_add_to_ham_csr(qd3t_sp,-g_couple3,0)
+      call quantum_add_to_ham_csr(qd3_spt,-g_couple3,0)
+
+      call quantum_add_to_ham_csr(qd4t_sp,-g_couple4,0)
+      call quantum_add_to_ham_csr(qd4_spt,-g_couple4,0)
+
       print*,'after add to ham',nid      
       call quantum_ham_finalize_csr()
       print*,'after add to ham',nid      
@@ -186,11 +200,11 @@ c$$$
 c$$$      call exitt
 c$$$
 
-      call quantum_lin_add(qd1,qd1n,-gamma_pi/2)
-      call quantum_lin_add(qd1n,qd1n,-gamma_di)
+      !call quantum_lin_add(qd1,qd1n,-gamma_pi/2)
+!      call quantum_lin_add(qd1n,qd1n,-gamma_di)
 
-      !call quantum_lin_add(qd2,qd2n,-gamma_pi/2)
-      !call quantum_lin_add(qd2n,qd2n,-gamma_di)
+ !     call quantum_lin_add(qd2,qd2n,-gamma_pi/2)
+  !    call quantum_lin_add(qd2n,qd2n,-gamma_di)
 
       !call quantum_lin_add(qd3,qd3n,-gamma_pi/2)
       !call quantum_lin_add(qd3n,qd3n,-gamma_di)
@@ -199,17 +213,6 @@ c$$$
 
       call quantum_lin_finalize()
 
-      if(nid.eq.0) then
-      do ii=1,num_nl_lin_ops
-         print*,'l_length',lin_l_length(ii)
-         print*,'nl_col_length',lin_nl_col_length(ii)
-         do kk=1,lin_nl_col_length(ii)
-            print*,'lin_nl_length',lin_nl_length(kk,ii)
-         enddo
-      enddo
-      endif
-!      call quantum3_debug8cores()
-!      call exitt()
 
 c$$$      call quantum_lin_gs_op()
 c$$$      
@@ -236,7 +239,7 @@ c$$$      call exitt()
 
 !     Add observables
       call quantum_observable(sp_a_spt,mu_s)
-      call quantum_observable(qd1_a_qd1t,mu_q)
+!      call quantum_observable(qd1_a_qd1t,mu_q)
       !call quantum_observable(qd2_a_qd2t,mu_q)
 
       call cem_quantum3_propagation_rk

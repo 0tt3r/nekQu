@@ -51,16 +51,30 @@ c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
 
-      if(nid.eq.0) rho_r(1,1) = 1
+!      if(nid.eq.0) rho_r(15,15) = 1
 !FIXME: Move density matrix initialization to user routine!
-c$$$      do ii=1,nstate_np
-c$$$         if(ii+c_offset.eq.levels(1)) then
-c$$$            rho_r(ii+c_offset,ii) = 1.0/2.0
+      do ii=1,nstate_np
+c$$$         if(ii+c_offset.eq.5+6*8) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0!/3.0
+c$$$!            rho_r(ii+c_offset,ii) = 1.0
 c$$$         endif
-c$$$         if(ii+c_offset.eq.2*levels(1)) then
-c$$$            rho_r(ii+c_offset,ii) = 1.0/2.0
+
+         if(ii+c_offset.eq.5) then
+            rho_r(ii+c_offset,ii) = 1.0!/3.0
+!            rho_r(ii+c_offset,ii) = 1.0
+         endif
+c$$$         if(ii+c_offset.eq.16) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0!/3.0
+c$$$!            rho_r(ii+c_offset,ii) = 1.0
 c$$$         endif
-c$$$      enddo
+
+c$$$         if(ii+c_offset.eq.12+16) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0/3.0
+c$$$         endif
+c$$$         if(ii+c_offset.eq.12+2*16) then
+c$$$            rho_r(ii+c_offset,ii) = 1.0/3.0
+c$$$         endif
+      enddo
 !      rho_r(nstate,nstate) = 1.0
 !$acc end parallel
 
@@ -84,7 +98,11 @@ c!$acc update device(resrho_i)
       qrtime4= 0.0
 
       dt           = timemax/(nqstep)
-      printdt      = 1*dt
+      if(nqstep_print.gt.0) then
+         printdt      = timemax/(nqstep_print)
+      else
+         printdt = dt
+      endif
       obsPrintSkip = 1
       time    = 0
       timeOld = -1
@@ -256,7 +274,7 @@ c-----------------------------------------------------------------------
       include 'RK5'
       include 'mpif.h'
       real*8     ca,cb
-      integer  ii,jl,kl,jj
+      integer  ii2,jl,kl,jj,ii
 
       ca = rk4a(ii)
       cb = rk4b(ii)
@@ -271,28 +289,10 @@ c$$$         enddo
 c$$$      enddo
 
 
-c$$$      print*,'pre'
-c$$$      print*,'rho_r'
-c$$$      do ii=1,nstate
-c$$$         write(6,'(100g15.5)') (resrho_r(ii,jj), jj=1,nstate)
-c$$$      enddo
-c$$$      print*,'rho_i'
-c$$$      do ii=1,nstate
-c$$$         write(6,'(100g15.5)') (resrho_i(ii,jj), jj=1,nstate)
-c$$$      enddo
 
 
       call rk4_quantum3_upd(rho_r,k_rho_r,resrho_r,cb,ca)
       call rk4_quantum3_upd(rho_i,k_rho_i,resrho_i,cb,ca)
-c$$$      print*,'post'
-c$$$      print*,'rho_r'
-c$$$      do ii=1,nstate
-c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
-c$$$      enddo
-c$$$      print*,'rho_i'
-c$$$      do ii=1,nstate
-c$$$         write(6,'(100g15.5)') (rho_i(ii,jj), jj=1,nstate)
-c$$$      enddo
 
       return
       end
@@ -521,6 +521,7 @@ c-----------------------------------------------------------------------
       end
 
 
+
 c------------------------------------------------------------------
       subroutine cem_quantum3_propagation_init
 c------------------------------------------------------------------
@@ -530,9 +531,9 @@ c------------------------------------------------------------------
       integer ii,jj
       complex  sig
 
-      if(nqstep.gt.maxTimeSteps) then
+      if(nqstep_print.gt.maxTimeSteps) then
          print*, 'ERROR!'
-         print*, 'nqstep TOO LARGE FOR THIS maxTimeSteps!'
+         print*, 'nqstep_print TOO LARGE FOR THIS maxTimeSteps!'
          print*, 'maxTimeSteps = ',maxTimeSteps
          call exitt()
       endif
@@ -580,6 +581,147 @@ c     Write file headers
 
       return
       end
+
+
+c--------------------------------------------------------------------- 
+      subroutine cem_quantum3_propagation_pece
+c--------------------------------------------------------------------- 
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'RK5'
+      integer  iEh, ii, IERR, jj,kk,j0,iflag,neqn
+      real*8     stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
+      real*8   dclock,old_dt,relerr,abserr,told,tnew
+      complex  sig,tmpc1,ci
+      external quantum3_mult_pece
+      ci=(0.0,1.0)
+      stime0= 0.0          
+      stime1= 0.0          
+      stime2= 0.0          
+      stime3= 0.0          
+      stime4= 0.0      
+      stime5= 0.0      
+      stime6= 0.0      
+      stime7= 0.0      
+      stime0= dclock()     
+      stime1= dclock()
+      relerr = 1e-10
+      abserr = 1e-10
+      call cem_quantum3_propagation_init
+      
+ccc Setup acc stuff
+
+!$acc data copyin(hamilt_I_m_p,hamilt_0_m_p,hamilt_m_p)
+!$acc&     copyin(ham_a,ham_ia,ham_ja,ham_0_m_p_a,ham_m_p_a)
+!$acc&     pcreate(rho_i,rho_r,rho,drho,resrho_r,resrho_i)
+!$acc&     copyin(isstate,iqstate_m,state_sums,nq_minimal)
+!$acc&     pcreate(tmp_r1,tmp_i1,tmp_c1,k_rho_r,k_rho_i)
+!$acc&     copyin(rk4a,rk4b,rk4c)
+ccc parameters for the GPU to use - scalars automatically imported
+c!$acc&     copyin(numqd,numsp,nstate,n_in_row,nEh,nqstep,timemax)
+c!$acc&     copyin(Emin,Emax,dEh,relerr,abserr)
+c!$acc&     copyin(omega_s,gamma_s,s_mu)
+!$acc&     copyin(omega_q_m,gamma_q_m,gamma_d_m,q_mu_m,g_couple_m)
+c!$acc&     copyin(pulse_omega_0,pulse_t_0,pulse_duration,energy0_pls)
+c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
+
+      neqn = 2*nstate_np*nstate
+      iflag = 1
+       iqstep=1
+       iiqstep = 1
+!       old_dt = dt
+
+       do iqstep=0,nqstep-1
+          stime1= dclock()
+          !Store in vector
+          do jj=1,nstate_np
+             do ii=1,nstate
+                j0 = (jj-1)*nstate+ii
+                rho_vec(0*nstate2+j0) = rho_r(ii,jj)
+                rho_vec(1*nstate2+j0) = rho_i(ii,jj)
+             enddo
+          enddo
+
+          
+          told = iqstep*dt
+          tnew = (iqstep+1)*dt
+          iflag=1
+          call ode(quantum3_mult_pece,neqn,rho_vec,told,tnew,
+     $         relerr,abserr,iflag,work_ode,iwork)
+
+! Check that integration went okay
+          if(iflag.ne.2) then
+             print*,"ODE integrator gave warning flag", iflag, 
+     $            "at time step", ii
+             call exitt()
+          endif
+             
+          stime5 = stime5 + dclock()-stime7
+          stime7 = dclock()
+
+          do jj=1,nstate_np
+             do ii=1,nstate
+                j0 = (jj-1)*nstate+ii
+                rho_r(ii,jj) = rho_vec(0*nstate2+j0)
+                rho_i(ii,jj) = rho_vec(1*nstate2+j0)
+             enddo
+          enddo
+          
+
+          qrtime4 = qrtime4 + dclock() - stime7
+
+c         if(abs(time-pulse_t_0).lt.3*pulse_duration) then
+c             dt=dt_small
+c         else
+c             dt=dt_large
+c         endif
+c$$$         if(time.gt.timemax/2) then
+c$$$            dt = old_dt
+c$$$         endif
+         time= time+dt
+         stime7= dclock()
+         if(useGates.eqv..true.) then
+            call quantum_apply_gates()
+         endif
+         call cem_quantum3_observables
+         if(time.gt.timeOld) then
+            call cem_quantum3_pop()
+            timeOld = timeOld+printdt
+            iiqstep = iiqstep + 1
+            stime7= dclock()-stime7
+         endif
+         stime1= dclock()-stime1
+         qrtime1= qrtime1+stime1
+         qrtime2= stime4
+         qrtime3= stime5
+!         qrtime4= stime7
+         call userchk
+!         if(windowing) call quantum_update_window()
+c$$$         if(iqstep.gt.100) then
+c$$$            stime0 = dclock()-stime0
+c$$$            if(nid.eq.0) write(6,*)'stime0:',stime0 
+c$$$            call exitt()
+c$$$         endif
+      enddo
+
+      stime0 = dclock()-stime0
+      if(nid.eq.0) write(6,*)'stime0:',stime0 
+
+c$$$      print*,"Rho_r final"
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+
+      call cem_quantum3_propagation_finalize
+
+!$acc end data
+
+      return
+      end
+
+
+
 c--------------------------------------------------------------------- 
       subroutine cem_quantum3_propagation_rk
 c--------------------------------------------------------------------- 
@@ -587,7 +729,7 @@ c---------------------------------------------------------------------
       include 'SIZE'
       include 'QUANT'
       include 'RK5'
-      integer  iEh, ii, IERR, jj,kk
+      integer  iEh, ii, IERR, jj,kk,ii2
       real*8     stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
       real*8   dclock,old_dt
       complex  sig,tmpc1,ci
@@ -632,11 +774,18 @@ c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
           stime1= dclock()
          do ii= 1,5
             stime7 = dclock()
+
+
             call cem_quantum3_hamiltonian()
             stime4 = stime4 + dclock()-stime7
             stime7 = dclock()
+
+
+
             call quantum_lin_mxm()
 !            call quantum_lin_mpi_get()
+
+
             stime5 = stime5 + dclock()-stime7
             stime7 = dclock()
             call rk_quantum3_ab(ii)
@@ -668,6 +817,7 @@ c$$$         endif
          qrtime3= stime5
 !         qrtime4= stime7
          call userchk
+!         if(windowing) call quantum_update_window()
          iqstep=iqstep+1
 c$$$         if(iqstep.gt.100) then
 c$$$            stime0 = dclock()-stime0
@@ -691,6 +841,189 @@ c$$$      enddo
       return
       end
 
+C   ROUTINE BELOW UNTESTED
+c---------------------------------------------------------------------
+      subroutine quantum_update_window
+c---------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+#ifdef MPI
+      include 'mpif.h'
+#endif
+      integer ii,jj,move_window,ierr,req_sen,req_rec,j0
+      integer status,buf_size
+      real pop,minimum_pop
+
+      !Check if highest energy state is depopulated
+      !Highest energy state is assumed to be last state, last core
+      !Assumes oscillator is first operator
+      !Assumes atleast 2*ltonq is on one core
+      if(nid.eq.(np-1)) then
+
+         pop = 0
+      !Find population in last oscillator state
+         do ii=1,ltonq !ltonq is everything but windowed operator
+            ! Don't multiply by state because we only care about the 
+            ! value of the elements
+            pop = pop + rho_r(nstate_np-(ii-1),nstate-(ii-1))
+         enddo
+
+         !If the pop is small enough, we need to 
+         !move the window
+         if(pop.lt.minimum_pop) then
+            !Add the pop from the exiting columns to the columns
+            !1 state down - probably not correct, but if
+            !pop is low enough, should not matter
+            do ii=1,ltonq
+               rho_r(nstate_np-(ltonq + ii-1),nstate-(ltonq + ii-1)) = 
+     $              rho_r(nstate_np-(ltonq+ii-1),nstate-(ltonq+ii-1)) +
+     $              rho_r(nstate_np-(ii-1),nstate-(ii-1))
+            enddo
+
+            !Send '1' to other cores to signify that we need
+            !to move the window
+            move_window = 1
+#ifdef MPI            
+            call MPI_BCAST(move_window,1,MPI_INTEGER,np,
+     $              MPI_COMM_WORLD,ierr)
+#endif
+         else 
+            !Send '0' to other cores to signify that we do not need
+            !to move the window
+
+            move_window = 0
+#ifdef MPI            
+            call MPI_BCAST(move_window,1,MPI_INTEGER
+     $              ,np,MPI_COMM_WORLD,ierr)
+#endif
+
+         endif
+      else
+         !Receive instructions about moving window
+#ifdef MPI
+         call MPI_BCAST(move_window,1,MPI_INTEGER
+     $        ,np,MPI_COMM_WORLD,ierr)
+#endif
+      endif
+
+         
+      if(move_window.eq.1) then
+         buf_size = ltonq*(nstate-ltonq)
+         
+         !all cores but final
+         if(nid.ne.(np-1)) then
+
+            if(nid.ne.0) then
+!     Post MPI_IRECV on our incoming columns - core 0 has no upper neighbor
+               call MPI_IRECV(tmpiv,2*buf_size,MPI_REAL,
+     $              nid-1,MPI_ANY_TAG,MPI_COMM_WORLD,req_rec,ierr)
+            endif
+
+            !Send off last ltonq columns
+            !Pack buffers
+            do jj=nstate_np-ltonq+1,nstate_np
+               do ii=1,nstate-ltonq 
+!     We don't care about the last rows, they are being windowed away
+                  !We want to fill the first part of 
+                  !tmprv, so we offset j0 to start at 1
+                  j0 = (jj-(nstate_np-ltonq)-1)*nstate+ii
+                  tmprv(j0)          = rho_r(ii,jj)
+                  tmprv(j0+buf_size) = rho_i(ii,jj)
+               enddo
+            enddo
+
+            !MPI_ISEND to next core
+            call MPI_ISEND(tmprv,2*buf_size,MPI_REAL,nid+1,
+     $           MPI_ANY_TAG,MPI_COMM_WORLD,req_sen,ierr)
+!     Now shuffle the columns down the diagonal while we wait for the message to come
+            do jj=1,nstate_np-ltonq
+               do ii=1,nstate-ltonq
+!     We want to go in reverse order, hence the nstate- ...
+                  rho_r(nstate_np-jj+1,nstate-ii+1) = 
+     $                 rho_r(nstate_np-ltonq-jj+1,nstate-ltonq-ii+1)
+               enddo
+            enddo
+
+            if(nid.ne.0) then
+               call MPI_WAIT(req_rec,status,ierr)
+               
+!     Shuffle the new columns into their proper places
+               do jj=1,ltonq
+                  do ii=ltonq+1,nstate
+                     !We want to store these new columns in the lower
+                     !parts of the columns
+                     j0=(jj-1)*nstate+ii-ltonq
+                     rho_r(ii,jj) = tmpiv(j0)
+                     rho_i(ii,jj) = tmpiv(j0+buf_size)
+                  enddo
+               enddo
+               
+            else 
+!     First core needs to 0 out the whole first ltonq columns,
+!     in addition to the firt ltonq rows
+               do jj=1,ltonq
+                  do ii=1,nstate
+                     rho_r(ii,jj) = 0.0
+                     rho_i(ii,jj) = 0.0
+                  enddo
+               enddo
+            endif
+         else                   !Final core, who has nothing to send
+
+!     Post MPI_IRECV on our incoming columns - core 0 has no upper neighbor
+            if(np.gt.1) then
+               call MPI_IRECV(tmpiv,2*buf_size,MPI_REAL,nid-1,
+     $              MPI_ANY_TAG,MPI_COMM_WORLD,req_rec,ierr)
+            endif
+
+!     Now shuffle the columns down the diagonal while we wait for the message to come
+            do jj=1,nstate_np-ltonq
+               do ii=1,nstate-ltonq
+!     We want to go in reverse order, hence the nstate- ...
+                  rho_r(nstate_np-jj+1,nstate-ii+1) = 
+     $                 rho_r(nstate_np-ltonq-jj+1,nstate-ltonq-ii+1)
+               enddo
+            enddo
+            !Wait for our new data
+            if(np.gt.1) then
+               call MPI_WAIT(req_rec,status,ierr)
+
+!     Shuffle the new columns into their proper places
+               do jj=1,ltonq
+                  do ii=ltonq+1,nstate
+!     We want to store these new columns in the lower
+!     parts of the columns
+                     j0=(jj-1)*nstate+ii-ltonq
+                     rho_r(ii,jj) = tmpiv(j0)
+                     rho_i(ii,jj) = tmpiv(j0+buf_size)
+                  enddo
+               enddo
+            else 
+!     First core needs to 0 out the whole first ltonq columns,
+!     in addition to the first ltonq rows
+               do jj=1,ltonq
+                  do ii=1,nstate
+                     rho_r(ii,jj) = 0.0
+                     rho_i(ii,jj) = 0.0
+                  enddo
+               enddo
+            endif
+
+         endif
+!     Everyone does the below
+!     The first ltonq rows of rho are 0, since they represent the newly introduced state
+         do jj=1,nstate_np
+            do ii=1,ltonq
+               rho_r(ii,jj) = 0.0
+               rho_i(ii,jj) = 0.0
+            enddo
+         enddo
+
+      endif
+
+      return
+      end
 
 c---------------------------------------------------------------------
       subroutine cem_quantum3_propagation_finalize
@@ -726,9 +1059,22 @@ c---------------------------------------------------------------------
 !     Reduce time vectors
 #ifdef MPI
       kk=1
-      do ii=1,numberOfOps
-         if(is_vec(ii).eqv..true.) then
-            do jj=1,levels(ii)
+      if(print_during_run.eqv..false.) then
+         do ii=1,numberOfOps
+            if(is_vec(ii).eqv..true.) then
+               do jj=1,levels(ii)
+                  if(nid.eq.0) then
+                     call MPI_REDUCE(MPI_IN_PLACE,pop_time(1,kk),
+     $                    iiqstep,MPI_REAL8,MPI_SUM,0,
+     $                    MPI_COMM_WORLD,IERR)
+                  else
+                     call MPI_REDUCE(pop_time(1,kk),pop_time(1,kk),
+     $                    iiqstep,MPI_REAL8,MPI_SUM,0,
+     $                    MPI_COMM_WORLD,IERR)
+                  endif
+                  kk = kk+1
+               enddo
+            else
                if(nid.eq.0) then
                   call MPI_REDUCE(MPI_IN_PLACE,pop_time(1,kk),iiqstep,
      $                 MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
@@ -737,30 +1083,21 @@ c---------------------------------------------------------------------
      $                 MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
                endif
                kk = kk+1
-            enddo
-         else
+            endif
+         enddo
+
+      
+         number_pops = kk - 1
+         do ii=1,numObservables
             if(nid.eq.0) then
-               call MPI_REDUCE(MPI_IN_PLACE,pop_time(1,kk),iiqstep,
+               call MPI_REDUCE(MPI_IN_PLACE,obs_time(1,ii),iqstep,
      $              MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
             else
-               call MPI_REDUCE(pop_time(1,kk),pop_time(1,kk),iiqstep,
+               call MPI_REDUCE(obs_time(1,ii),obs_time(1,ii),iqstep,
      $              MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
             endif
-            kk = kk+1
-         endif
-      enddo
-      
-      number_pops = kk - 1
-      do ii=1,numObservables
-         if(nid.eq.0) then
-            call MPI_REDUCE(MPI_IN_PLACE,obs_time(1,ii),iqstep,
-     $           MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
-         else
-            call MPI_REDUCE(obs_time(1,ii),obs_time(1,ii),iqstep,
-     $           MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
-         endif
-      enddo
-
+         enddo
+      endif
 #endif
 
       ci = (0.0,1.0)
@@ -768,10 +1105,6 @@ c---------------------------------------------------------------------
          time = dt
          kk = 1
          if(ifPulse.eqv..true.) then
-         do kk=1,nEh
-            if(nid.eq.0) print*,'en_t',en_t(kk)
-         enddo
-            
             
             do ii=1,iqstep
                
@@ -800,42 +1133,41 @@ c     Now, do the fourier transform to save the value
             enddo
          endif
 
-         do kk=1,nEh
-            if(nid.eq.0) print*,omega_quant(kk)
-         enddo
          kk = 1
          time = dt
-         do while(time.lt.timemax)
-            if(ifPulse.eqv..true.) then
-               call usertimedep(pulseFactor)
-               if(rwa.eqv..true.) then
-                  fullPulse = 2*pulseFactor*
-     $                 cos(pulse_omega_0*(time-pulse_t_0))
+         if(print_during_run.eqv..false.) then
+            do while(time.lt.timemax)
+               if(ifPulse.eqv..true.) then
+                  call usertimedep(pulseFactor)
+                  if(rwa.eqv..true.) then
+                     fullPulse = 2*pulseFactor*
+     $                    cos(pulse_omega_0*(time-pulse_t_0))
+                  else
+                     fullPulse = pulseFactor
+                  endif
+                  if(abs(fullPulse).lt.1e-20) fullPulse = 0
+                  
+                  write(13,12)time*timeunit,fullPulse
+     $                 ,(obs_time(kk,jj),jj=1,numObservables)
                else
-                  fullPulse = pulseFactor
+                  write(13,12)time*timeunit
+     $                 ,(obs_time(kk,jj),jj=1,numObservables)
                endif
-               if(abs(fullPulse).lt.1e-20) fullPulse = 0
+               kk = kk + obsPrintSkip
+               time = time + obsPrintSkip*dt
+            enddo
 
-               write(13,12)time*timeunit,fullPulse
-     $              ,(obs_time(kk,jj),jj=1,numObservables)
-            else
-               write(13,12)time*timeunit
-     $              ,(obs_time(kk,jj),jj=1,numObservables)
-            endif
-            kk = kk + obsPrintSkip
-            time = time + obsPrintSkip*dt
-         enddo
+            time = dt
 
-         time = dt
-
-         do ii=1,iiqstep
+            do ii=1,iiqstep
 !Print populations
-            write(12,12)time*timeunit
-     $           ,(pop_time(ii,jj),jj=1,number_pops)
-
-            time = time+printdt
-         enddo
- 12      format(1p20g20.8)
+               write(12,12)time*timeunit
+     $              ,(pop_time(ii,jj),jj=1,number_pops)
+               
+               time = time+printdt
+            enddo
+ 12         format(1p20g20.8)
+         endif
 c     Print out results
          if(ifPulse.eqv..true.) then
             write(11,*)'#eV,sig_abs,sig_scatt,sig_tot'
@@ -858,7 +1190,7 @@ c     Print out results
                   sig = sig + obs_freq(jj,ii)
                enddo
                tmpc2 = sig
-               print*,'sig ',sig
+
                sig  = rinc*sig/en_t(ii)
                rinc = 8.0d0*pi*(omega_quant(ii)/timeunit)**4/
      $              (3.0d0*c_speed**4)*
@@ -1089,6 +1421,48 @@ c!$omp end parallel do
       end
 
 
+c-----------------------------------------------------------------------
+      subroutine quantum3_mult_pece(t,y,yp)
+c-----------------------------------------------------------------------
+      implicit none
+      include 'SIZE'
+      include 'QUANT' 
+      integer  n2,i,j,j0
+      real*8   y(2*nstate_np*nstate),yp(2*nstate_np*nstate),t
+
+      do j=1,nstate_np
+         do i=1,nstate
+            j0 = (j-1)*nstate+i
+            rho_r(i,j) = y(0*nstate2+j0)
+            rho_i(i,j) = y(1*nstate2+j0)
+c$$$            if(i.eq.j) then
+c$$$               print*,'before',y(0*nstate2+j0)
+c$$$            endif
+         enddo
+      enddo
+
+
+      call cem_quantum3_hamiltonian
+      call quantum_lin_mxm
+!      call quantum_lin_mpi_get
+
+      do j=1,nstate_np
+         do i=1,nstate
+            j0 = (j-1)*nstate+i
+            yp(0*nstate2+j0) = resrho_r(i,j)
+            yp(1*nstate2+j0) = resrho_i(i,j)
+c$$$            if(i.eq.j) then
+c$$$               print*,'after',yp(0*nstate2+j0)
+c$$$            endif
+
+         enddo
+      enddo
+
+      return
+      end
+
+
+
 !******************************************************************
 !*
 !* quantum_apply_gates applies the user defined gate sequence in time
@@ -1251,6 +1625,7 @@ c     Find populations
                do jj=1,nstate_np
                   curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
                   currentPop = real(tmp_c1(jj+c_offset,jj))
+                  currentPop = real(rho_r(jj+c_offset,jj))
                   if(curState.eq.kk-1) then
 !     print*,curState,currentPop
                      pop = pop + currentPop
@@ -1258,6 +1633,7 @@ c     Find populations
                enddo
                if(abs(pop).le.1e-13) pop = 0.0
                pop_time(iiqstep,ll) = pop
+               tmprv(ll) = pop
                ll=ll+1
             enddo
          else
@@ -1269,15 +1645,35 @@ c     Find populations
                pop = pop + 
      $              curState*currentPop
             enddo
+
+
 !     Save results
             if(abs(pop).le.1e-13) pop = 0.0
             pop_time(iiqstep,ll) = pop
+            tmprv(ll) = pop
             ll=ll+1
          endif
 
-
-
       enddo
+
+
+      if(print_during_run.eqv..true.) then
+         ll = ll-1
+
+         if(nid.eq.0) then
+            call MPI_REDUCE(MPI_IN_PLACE,tmprv,
+     $           ll,MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+            write(12,12)time*timeunit,(tmprv(ii),ii=1,ll)
+            call flush(12)
+ 12         format(1p20g20.8)
+         else
+            call MPI_REDUCE(tmprv,tmprv,
+     $           ll,MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
+         endif
+         
+      endif
+
+
       
 
 c     Check for radically wrong results
@@ -1294,8 +1690,16 @@ c     Local only check (just for exploding values)
          call exitt()
       endif
 
+      if(pop.ne.pop) then
+         print*,'LOCAL TRACE GREATER NAN'
+         print*,'CORE ',nid
+         stop
+         call exitt()
+      endif
+
 c     global check
       call gop(pop,currentPop,'+  ',1)
+
       if(nid.eq.0.and.abs(currentPop-1).gt.1e-10) then 
          print*,'GLOBAL TRACE DIFFERENT THAN ONE'
          print*,'TRACE',currentPop
@@ -1399,11 +1803,12 @@ c$$$      enddo
 
       do ii=1,numObservables
          obs_time(iqstep,ii) = observable(ii)
-
       enddo
 
-
-
+      if(print_during_run.eqv..true.) then
+         write(13,12)time*timeunit,(observable(jj),jj=1,numObservables)
+      endif
+ 12   format(1p20g20.8)
 
 
 !      if(abs(pulseFactor).lt.1e-10) pulseFactor=0
@@ -1751,5 +2156,687 @@ c     $               +rho_8by8(jj,kk+twotoiq)
 
 
 
+      return
+      end
+
+
+      subroutine ode(f,neqn,y,t,tout,relerr,abserr,iflag,work,iwork)
+      implicit real*8(a-h,o-z)
+c Shampine's differential equations integrator
+c   subroutine ode integrates a system of neqn
+c   first order ordinary differential equations of the form:
+c             dy(i)/dt = f(t,y(1),y(2),...,y(neqn))
+c             y(i) given at  t .
+c   the subroutine integrates from  t  to  tout .  on return the
+c   parameters in the call list are set for continuing the integration.
+c   the user has only to define a new value  tout  and call  ode  again.
+c
+c   the differential equations are actually solved by a suite of codes
+c   de ,  step , and  intrp .  ode  allocates virtual storage in the
+c   arrays  work  and  iwork  and calls  de .  de  is a supervisor which
+c   directs the solution.  it calls on the routines  step  and  intrp
+c   to advance the integration and to interpolate at output points.
+c   step  uses a modified divided difference form of the adams pece
+c   formulas and local extrapolation.  it adjusts the order and step
+c   size to control the local error per unit step in a generalized
+c   sense.  normally each call to  step  advances the solution one step
+c   in the direction of  tout .  for reasons of efficiency  de
+c   integrates beyond  tout  internally, though never beyond
+c   t+10*(tout-t), and calls  intrp  to interpolate the solution at
+c   tout .  an option is provided to stop the integration at  tout  but
+c   it should be used only if it is impossible to continue the
+c   integration beyond  tout .
+c
+c   this code is completely explained and documented in the text,
+c   computer solution of ordinary differential equations:  the initial
+c   value problem  by l. f. shampine and m. k. gordon.
+c
+c   the parameters represent:
+c      f -- real subroutine f(t,y,yp) to evaluate
+c                derivatives yp(i)=dy(i)/dt
+c      neqn -- number of equations to be integrated (integer)
+c      y(*) -- solution vector at t                 (real)
+c      t -- independent variable                    (real)
+c      tout -- point at which solution is desired   (real)
+c      relerr,abserr -- relative and absolute error tolerances for local
+c           error test (real).  at each step the code requires
+c             abs(local error) .le. abs(y)*relerr + abserr
+c           for each component of the local error and solution vectors
+c      iflag -- indicates status of integration     (integer)
+c      work(*)  (real)  -- arrays to hold information internal to
+c      iwork(*) (integer)    which is necessary for subsequent calls
+c
+c   first call to ode --
+c
+c   the user must provide storage in his calling program for the arrays
+c   in the call list,
+c      y(neqn), work(100+21*neqn), iwork(5),
+c   declare  f  in an external statement, supply the real
+c   subroutine f(t,y,yp)  to evaluate
+c      dy(i)/dt = yp(i) = f(t,y(1),y(2),...,y(neqn))
+c   and initialize the parameters:
+c      neqn -- number of equations to be integrated
+c      y(*) -- vector of initial conditions
+c      t -- starting point of integration
+c      tout -- point at which solution is desired
+c      relerr,abserr -- relative and absolute local error tolerances
+c      iflag -- +1,-1.  indicator to initialize the code.  normal input
+c           is +1.  the user should set iflag=-1 only if it is
+c           impossible to continue the integration beyond  tout .
+c   all parameters except  f ,  neqn  and  tout  may be altered by the
+c   code on output so must be variables in the calling program.
+c
+c   output from  ode  --
+c
+c      neqn -- unchanged
+c      y(*) -- solution at  t
+c      t -- last point reached in integration.  normal return has
+c           t = tout .
+c      tout -- unchanged
+c      relerr,abserr -- normal return has tolerances unchanged.  iflag=3
+c           signals tolerances increased
+c      iflag = 2 -- normal return.  integration reached  tout
+c            = 3 -- integration did not reach  tout  because error
+c                   tolerances too small.  relerr ,  abserr  increased
+c                   appropriately for continuing
+c            = 4 -- integration did not reach  tout  because more than
+c                   500 steps needed
+c            = 5 -- integration did not reach  tout  because equations
+c                   appear to be stiff
+c            = 6 -- invalid input parameters (fatal error)
+c           the value of  iflag  is returned negative when the input
+c           value is negative and the integration does not reach  tout ,
+c           i.e., -3, -4, -5.
+c      work(*),iwork(*) -- information generally of no interest to the
+c           user but necessary for subsequent calls.
+c
+c   subsequent calls to  ode --
+c
+c   subroutine  ode  returns with all information needed to continue
+c   the integration.  if the integration reached  tout , the user need
+c   only define a new  tout  and call again.  if the integration did not
+c   reach  tout  and the user wants to continue, he just calls again.
+c   the output value of  iflag  is the appropriate input value for
+c   subsequent calls.  the only situation in which it should be altered
+c   is to stop the integration internally at the new  tout , i.e.,
+c   change output  iflag=2  to input  iflag=-2 .  error tolerances may
+c   be changed by the user before continuing.  all other parameters must
+c   remain unchanged.
+c
+c***********************************************************************
+c*  subroutines  de  and  step  contain machine dependent constants.   *
+c*  be sure they are set before using  ode .                           *
+c***********************************************************************
+      logical start,phase1,nornd
+      dimension y(neqn),work(1),iwork(5)
+      external f
+      data ialpha,ibeta,isig,iv,iw,ig,iphase,ipsi,ix,ih,ihold,istart,
+     1  itold,idelsn/1,13,25,38,50,62,75,76,88,89,90,91,92,93/
+      iyy = 100
+      iwt = iyy + neqn
+      ip = iwt + neqn
+      iyp = ip + neqn
+      iypout = iyp + neqn
+      iphi = iypout + neqn
+      if(abs(iflag) .eq. 1) go to 1
+      start = work(istart) .gt. 0.0d0
+      phase1 = work(iphase) .gt. 0.0d0
+      nornd = iwork(2) .ne. -1
+    1 call de(f,neqn,y,t,tout,relerr,abserr,iflag,work(iyy),
+     1  work(iwt),work(ip),work(iyp),work(iypout),work(iphi),
+     2  work(ialpha),work(ibeta),work(isig),work(iv),work(iw),work(ig),
+     3  phase1,work(ipsi),work(ix),work(ih),work(ihold),start,
+     4  work(itold),work(idelsn),iwork(1),nornd,iwork(3),iwork(4),
+     5  iwork(5))
+      work(istart) = -1.0d0
+      if(start) work(istart) = 1.0d0
+      work(iphase) = -1.0d0
+      if(phase1) work(iphase) = 1.0d0
+      iwork(2) = -1
+      if(nornd) iwork(2) = 1
+      return
+      end
+c
+c
+      subroutine de(f,neqn,y,t,tout,relerr,abserr,iflag,
+     1  yy,wt,p,yp,ypout,phi,alpha,beta,sig,v,w,g,phase1,psi,x,h,hold,
+     2  start,told,delsgn,ns,nornd,k,kold,isnold)
+      implicit real*8(a-h,o-z)
+      logical stiff,crash,start,phase1,nornd
+      dimension y(neqn),yy(neqn),wt(neqn),phi(neqn,16),p(neqn),yp(neqn),
+     1  ypout(neqn),psi(12),alpha(12),beta(12),sig(13),v(12),w(12),g(13)
+      external f
+c
+c***********************************************************************
+c*  the only machine dependent constant is based on the machine unit   *
+c*  roundoff err  u  which is the smallest positive number such that *
+c*  1.0+u .gt. 1.0 .  u  must be calculated and  fouru=4.0*u  inserted *
+c*  in the following data statement before using  de .  the routine    *
+c*  machin  calculates  u .  fouru  and  twou=2.0*u  must also be      *
+c*  inserted in subroutine  step1  before calling  de .
+      data fouru/.888e-15/
+c***********************************************************************
+c
+c   the constant  maxnum  is the maximum number of steps allowed in one
+c   call to  de .  the user may change this limit by altering the
+c   following statement
+      data maxnum/10000/
+c
+c            ***            ***            ***
+c   test for improper parameters
+c
+      if(neqn .lt. 1) go to 10
+      if(t .eq. tout) go to 10
+      if(relerr .lt. 0.0d0  .or.  abserr .lt. 0.0d0) go to 10
+      eps = max(relerr,abserr)
+      if(eps .le. 0.0d0) go to 10
+      if(iflag .eq. 0) go to 10
+      isn = sign(1,iflag)
+      iflag = abs(iflag)
+      if(iflag .eq. 1) go to 20
+      if(t .ne. told) go to 10
+      if(iflag .ge. 2  .and.  iflag .le. 5) go to 20
+   10 iflag = 6
+      return
+c
+c   on each call set interval of integration and counter for number of
+c   steps.  adjust input err tolerances to define weight vector for
+c   subroutine  step1
+c
+   20 del = tout - t
+      absdel = abs(del)
+      tend = t + 10.0d0*del
+      if(isn .lt. 0) tend = tout
+      nostep = 0
+      kle4 = 0
+      stiff = .false.
+      releps = relerr/eps
+      abseps = abserr/eps
+      if(iflag .eq. 1) go to 30
+      if(isnold .lt. 0) go to 30
+      if(delsgn*del .gt. 0.0d0) go to 50
+c
+c   on start and restart also set work variables x and yy(*), store the
+c   direction of integration and initialize the step size
+c
+   30 start = .true.
+      x = t
+      do 40 l = 1,neqn
+   40   yy(l) = y(l)
+      delsgn = sign(1.0d0,del)
+      h = sign(max(abs(tout-x),fouru*abs(x)),tout-x)
+c
+c   if already past output point, interpolate and return
+c
+   50 if(abs(x-t) .lt. absdel) go to 60
+      call intrp(x,yy,tout,y,ypout,neqn,kold,phi,psi)
+      iflag = 2
+      t = tout
+      told = t
+      isnold = isn
+      return
+c
+c   if cannot go past output point and sufficiently close,
+c   extrapolate and return
+c
+   60 if(isn .gt. 0  .or.  abs(tout-x) .ge. fouru*abs(x)) go to 80
+      h = tout - x
+      call f(x,yy,yp)
+      do 70 l = 1,neqn
+   70   y(l) = yy(l) + h*yp(l)
+      iflag = 2
+      t = tout
+      told = t
+      isnold = isn
+      return
+c
+c   test for too many steps
+c
+   80 if(nostep .lt. maxnum) go to 100
+      iflag = isn*4
+      if(stiff) iflag = isn*5
+      do 90 l = 1,neqn
+   90   y(l) = yy(l)
+      t = x
+      told = t
+      isnold = 1
+      return
+c
+c   limit step size, set weight vector and take a step
+c
+  100 h = sign(min(abs(h),abs(tend-x)),h)
+      do 110 l = 1,neqn
+  110   wt(l) = releps*abs(yy(l)) + abseps
+      call step1(x,yy,f,neqn,h,eps,wt,start,
+     1  hold,k,kold,crash,phi,p,yp,psi,
+     2  alpha,beta,sig,v,w,g,phase1,ns,nornd)
+c
+c   test for tolerances too small
+c
+      if(.not.crash) go to 130
+      iflag = isn*3
+      relerr = eps*releps
+      abserr = eps*abseps
+      do 120 l = 1,neqn
+  120   y(l) = yy(l)
+      t = x
+      told = t
+      isnold = 1
+      return
+c
+c   augment counter on number of steps and test for stiffness
+c
+  130 nostep = nostep + 1
+      kle4 = kle4 + 1
+      if(kold .gt. 4) kle4 = 0
+      if(kle4 .ge. 50) stiff = .true.
+      go to 50
+      end
+c
+      subroutine step1(x,y,f,neqn,h,eps,wt,start,
+     1  hold,k,kold,crash,phi,p,yp,psi,
+     2  alpha,beta,sig,v,w,g,phase1,ns,nornd)
+      implicit real*8(a-h,o-z)
+c
+      logical start,crash,phase1,nornd
+      dimension y(neqn),wt(neqn),phi(neqn,16),p(neqn),yp(neqn),psi(12)
+      dimension alpha(12),beta(12),sig(13),w(12),v(12),g(13),
+     1  gstr(13),two(13)
+      external f
+c***********************************************************************
+c*  the only machine dependent constants are based on the machine unit *
+c*  roundoff err  u  which is the smallest positive number such that *
+c*  1.0+u .gt. 1.0  .  the user must calculate  u  and insert          *
+c*  twou=2.0*u  and  fouru=4.0*u  in the data statement before calling *
+c*  the code.  the routine  machin  calculates  u .                    *
+      data twou,fouru/.444e-15,.888e-15/
+c***********************************************************************
+      data two/2.0d0,4.0d0,8.0d0,16.0d0,32.0d0,64.0d0,128.0d0,256.0d0,
+     1  512.0d0,1024.0d0,2048.0d0,4096.0d0,8192.0d0/
+      data gstr/0.500d0,0.0833d0,0.0417d0,0.0264d0,0.0188d0,0.0143d0,
+     1  0.0114d0,0.00936d0,0.00789d0,0.00679d0,0.00592d0,0.00524d0,
+     2  0.00468d0/
+c
+c
+c       ***     begin block 0     ***
+c   check if step size or err tolerance is too small for machine
+c   precision.  if first step, initialize phi array and estimate a
+c   starting step size.
+c                   ***
+c
+c   if step size is too small, determine an acceptable one
+c
+      crash = .true.
+      if(abs(h) .ge. fouru*abs(x)) go to 5
+      h = sign(fouru*abs(x),h)
+      return
+    5 p5eps = 0.5d0*eps
+c
+c   if err tolerance is too small, increase it to an acceptable value
+c
+      round = 0.0d0
+      do 10 l = 1,neqn
+   10   round = round + (y(l)/wt(l))**2
+      round = twou*sqrt(round)
+      if(p5eps .ge. round) go to 15
+      eps = 2.0*round*(1.0d0 + fouru)
+      return
+   15 crash = .false.
+      g(1)=1.0d0
+      g(2)=0.5d0
+      sig(1)=1.0d0
+      if(.not.start) go to 99
+c
+c   initialize.  compute appropriate step size for first step
+c
+      call f(x,y,yp)
+      sum = 0.0d0
+      do 20 l = 1,neqn
+        phi(l,1) = yp(l)
+        phi(l,2) = 0.0d0
+   20   sum = sum + (yp(l)/wt(l))**2
+      sum = sqrt(sum)
+      absh = abs(h)
+      if(eps .lt. 16.0d0*sum*h*h) absh = 0.25d0*sqrt(eps/sum)
+      h = sign(max(absh,fouru*abs(x)),h)
+      hold = 0.0d0
+      k = 1
+      kold = 0
+      start = .false.
+      phase1 = .true.
+      nornd = .true.
+      if(p5eps .gt. 100.0d0*round) go to 99
+      nornd = .false.
+      do 25 l = 1,neqn
+   25   phi(l,15) = 0.0d0
+   99 ifail = 0
+c       ***     end block 0     ***
+c
+c       ***     begin block 1     ***
+c   compute coefficients of formulas for this step.  avoid computing
+c   those quantities not changed when step size is not changed.
+c                   ***
+c
+  100 kp1 = k+1
+      kp2 = k+2
+      km1 = k-1
+      km2 = k-2
+c
+c   ns is the number of steps taken with size h, including the current
+c   one.  when k.lt.ns, no coefficients change
+c
+      if(h .ne. hold) ns = 0
+      if(ns.le.kold)   ns=ns+1
+      nsp1 = ns+1
+      if (k .lt. ns) go to 199
+c
+c   compute those components of alpha(*),beta(*),psi(*),sig(*) which
+c   are changed
+c
+      beta(ns) = 1.0d0
+      realns = ns
+      alpha(ns) = 1.0d0/realns
+      temp1 = h*realns
+      sig(nsp1) = 1.0d0
+      if(k .lt. nsp1) go to 110
+      do 105 i = nsp1,k
+        im1 = i-1
+        temp2 = psi(im1)
+        psi(im1) = temp1
+        beta(i) = beta(im1)*psi(im1)/temp2
+        temp1 = temp2 + h
+        alpha(i) = h/temp1
+        reali = i
+  105   sig(i+1) = reali*alpha(i)*sig(i)
+  110 psi(k) = temp1
+c
+c   compute coefficients g(*)
+c
+c   initialize v(*) and set w(*).  g(2) is set in data statement
+c
+      if(ns .gt. 1) go to 120
+      do 115 iq = 1,k
+        temp3 = iq*(iq+1)
+        v(iq) = 1.0d0/temp3
+  115   w(iq) = v(iq)
+      go to 140
+c
+c   if order was raised, update diagonal part of v(*)
+c
+  120 if(k .le. kold) go to 130
+      temp4 = k*kp1
+      v(k) = 1.0d0/temp4
+      nsm2 = ns-2
+      if(nsm2 .lt. 1) go to 130
+      do 125 j = 1,nsm2
+        i = k-j
+  125   v(i) = v(i) - alpha(j+1)*v(i+1)
+c
+c   update v(*) and set w(*)
+c
+  130 limit1 = kp1 - ns
+      temp5 = alpha(ns)
+      do 135 iq = 1,limit1
+        v(iq) = v(iq) - temp5*v(iq+1)
+  135   w(iq) = v(iq)
+      g(nsp1) = w(1)
+c
+c   compute the g(*) in the work vector w(*)
+c
+  140 nsp2 = ns + 2
+      if(kp1 .lt. nsp2) go to 199
+      do 150 i = nsp2,kp1
+        limit2 = kp2 - i
+        temp6 = alpha(i-1)
+        do 145 iq = 1,limit2
+  145     w(iq) = w(iq) - temp6*w(iq+1)
+  150   g(i) = w(1)
+  199   continue
+c       ***     end block 1     ***
+c
+c       ***     begin block 2     ***
+c   predict a solution p(*), evaluate derivatives using predicted
+c   solution, estimate local err at order k and errs at orders k,
+c   k-1, k-2 as if constant step size were used.
+c                   ***
+c
+c   change phi to phi star
+c
+      if(k .lt. nsp1) go to 215
+      do 210 i = nsp1,k
+        temp1 = beta(i)
+        do 205 l = 1,neqn
+  205     phi(l,i) = temp1*phi(l,i)
+  210   continue
+c
+c   predict solution and differences
+c
+  215 do 220 l = 1,neqn
+        phi(l,kp2) = phi(l,kp1)
+        phi(l,kp1) = 0.0d0
+  220   p(l) = 0.0d0
+      do 230 j = 1,k
+        i = kp1 - j
+        ip1 = i+1
+        temp2 = g(i)
+        do 225 l = 1,neqn
+          p(l) = p(l) + temp2*phi(l,i)
+  225     phi(l,i) = phi(l,i) + phi(l,ip1)
+  230   continue
+      if(nornd) go to 240
+      do 235 l = 1,neqn
+        tau = h*p(l) - phi(l,15)
+        p(l) = y(l) + tau
+  235   phi(l,16) = (p(l) - y(l)) - tau
+      go to 250
+  240 do 245 l = 1,neqn
+  245   p(l) = y(l) + h*p(l)
+  250 xold = x
+      x = x + h
+      absh = abs(h)
+      call f(x,p,yp)
+c
+c   estimate errs at orders k,k-1,k-2
+c
+      erkm2 = 0.0d0
+      erkm1 = 0.0d0
+      erk = 0.0d0
+      do 265 l = 1,neqn
+        temp3 = 1.0d0/wt(l)
+        temp4 = yp(l) - phi(l,1)
+        if(km2)265,260,255
+  255   erkm2 = erkm2 + ((phi(l,km1)+temp4)*temp3)**2
+  260   erkm1 = erkm1 + ((phi(l,k)+temp4)*temp3)**2
+  265   erk = erk + (temp4*temp3)**2
+      if(km2)280,275,270
+  270 erkm2 = absh*sig(km1)*gstr(km2)*sqrt(erkm2)
+  275 erkm1 = absh*sig(k)*gstr(km1)*sqrt(erkm1)
+  280 temp5 = absh*sqrt(erk)
+      err = temp5*(g(k)-g(kp1))
+      erk = temp5*sig(kp1)*gstr(k)
+      knew = k
+c
+c   test if order should be lowered
+c
+      if(km2)299,290,285
+  285 if(max(erkm1,erkm2) .le. erk) knew = km1
+      go to 299
+  290 if(erkm1 .le. 0.5d0*erk) knew = km1
+c
+c   test if step successful
+c
+  299 if(err .le. eps) go to 400
+c       ***     end block 2     ***
+c
+c       ***     begin block 3     ***
+c   the step is unsuccessful.  restore  x, phi(*,*), psi(*) .
+c   if third consecutive failure, set order to one.  if step fails more
+c   than three times, consider an optimal step size.  double err
+c   tolerance and return if estimated step size is too small for machine
+c   precision.
+c                   ***
+c
+c   restore x, phi(*,*) and psi(*)
+c
+      phase1 = .false.
+      x = xold
+      do 310 i = 1,k
+        temp1 = 1.0d0/beta(i)
+        ip1 = i+1
+        do 305 l = 1,neqn
+  305     phi(l,i) = temp1*(phi(l,i) - phi(l,ip1))
+  310   continue
+      if(k .lt. 2) go to 320
+      do 315 i = 2,k
+  315   psi(i-1) = psi(i) - h
+c
+c   on third failure, set order to one.  thereafter, use optimal step
+c   size
+c
+  320 ifail = ifail + 1
+      temp2 = 0.5d0
+      if(ifail - 3) 335,330,325
+  325 if(p5eps .lt. 0.25d0*erk) temp2 = sqrt(p5eps/erk)
+  330 knew = 1
+  335 h = temp2*h
+      k = knew
+      if(abs(h) .ge. fouru*abs(x)) go to 340
+      crash = .true.
+      h = sign(fouru*abs(x),h)
+      eps = eps + eps
+      return
+  340 go to 100
+c       ***     end block 3     ***
+c
+c       ***     begin block 4     ***
+c   the step is successful.  correct the predicted solution, evaluate
+c   the derivatives using the corrected solution and update the
+c   differences.  determine best order and step size for next step.
+c                   ***
+  400 kold = k
+      hold = h
+c
+c   correct and evaluate
+c
+      temp1 = h*g(kp1)
+      if(nornd) go to 410
+      do 405 l = 1,neqn
+        rho = temp1*(yp(l) - phi(l,1)) - phi(l,16)
+        y(l) = p(l) + rho
+  405   phi(l,15) = (y(l) - p(l)) - rho
+      go to 420
+  410 do 415 l = 1,neqn
+  415   y(l) = p(l) + temp1*(yp(l) - phi(l,1))
+  420 call f(x,y,yp)
+c
+c   update differences for next step
+c
+      do 425 l = 1,neqn
+        phi(l,kp1) = yp(l) - phi(l,1)
+  425   phi(l,kp2) = phi(l,kp1) - phi(l,kp2)
+      do 435 i = 1,k
+        do 430 l = 1,neqn
+  430     phi(l,i) = phi(l,i) + phi(l,kp1)
+  435   continue
+c
+c   estimate err at order k+1 unless:
+c     in first phase when always raise order,
+c     already decided to lower order,
+c     step size not constant so estimate unreliable
+c
+      erkp1 = 0.0d0
+      if(knew .eq. km1  .or.  k .eq. 12) phase1 = .false.
+      if(phase1) go to 450
+      if(knew .eq. km1) go to 455
+      if(kp1 .gt. ns) go to 460
+      do 440 l = 1,neqn
+  440   erkp1 = erkp1 + (phi(l,kp2)/wt(l))**2
+      erkp1 = absh*gstr(kp1)*sqrt(erkp1)
+c
+c   using estimated err at order k+1, determine appropriate order
+c   for next step
+c
+      if(k .gt. 1) go to 445
+      if(erkp1 .ge. 0.5d0*erk) go to 460
+      go to 450
+  445 if(erkm1 .le. min(erk,erkp1)) go to 455
+      if(erkp1 .ge. erk  .or.  k .eq. 12) go to 460
+c
+c   here erkp1 .lt. erk .lt. max(erkm1,erkm2) else order would have
+c   been lowered in block 2.  thus order is to be raised
+c
+c   raise order
+c
+  450 k = kp1
+      erk = erkp1
+      go to 460
+c
+c   lower order
+c
+  455 k = km1
+      erk = erkm1
+c
+c   with new order determine appropriate step size for next step
+c
+  460 hnew = h + h
+      if(phase1) go to 465
+      if(p5eps .ge. erk*two(k+1)) go to 465
+      hnew = h
+      if(p5eps .ge. erk) go to 465
+      temp2 = k+1
+      r = (p5eps/erk)**(1.0d0/temp2)
+      hnew = absh*max(0.5d0,min(0.9d0,r))
+      hnew = sign(max(hnew,fouru*abs(x)),h)
+  465 h = hnew
+      return
+c       ***     end block 4     ***
+      end
+c
+      subroutine intrp(x,y,xout,yout,ypout,neqn,kold,phi,psi)
+      implicit real*8(a-h,o-z)
+       dimension y(neqn),yout(neqn),ypout(neqn),phi(neqn,16),psi(12)
+      dimension g(13),w(13),rho(13)
+      data g(1)/1.0d0/,rho(1)/1.0d0/
+c
+      hi = xout - x
+      ki = kold + 1
+      kip1 = ki + 1
+c
+c   initialize w(*) for computing g(*)
+c
+      do 5 i = 1,ki
+        temp1 = i
+    5   w(i) = 1.0d0/temp1
+      term = 0.0d0
+c
+c   compute g(*)
+c
+      do 15 j = 2,ki
+        jm1 = j - 1
+        psijm1 = psi(jm1)
+        gamma = (hi + term)/psijm1
+        eta = hi/psijm1
+        limit1 = kip1 - j
+        do 10 i = 1,limit1
+   10     w(i) = gamma*w(i) - eta*w(i+1)
+        g(j) = w(1)
+        rho(j) = gamma*rho(jm1)
+   15   term = psijm1
+c
+c   interpolate
+c
+      do 20 l = 1,neqn
+        ypout(l) = 0.0d0
+   20   yout(l) = 0.0d0
+      do 30 j = 1,ki
+        i = kip1 - j
+        temp2 = g(i)
+        temp3 = rho(i)
+        do 25 l = 1,neqn
+          yout(l) = yout(l) + temp2*phi(l,i)
+   25     ypout(l) = ypout(l) + temp3*phi(l,i)
+   30   continue
+      do 35 l = 1,neqn
+   35   yout(l) = y(l) + hi*yout(l)
       return
       end

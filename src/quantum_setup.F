@@ -21,6 +21,7 @@
       rwa              = .false.
       calc_concurrence = .false.
       ham_finalized    = .false.
+      print_during_run = .false.
       pi               = 4.*ATAN(1.0)
       pulse_omega_0    = 0.0
       !Zero out the gates_table
@@ -40,6 +41,7 @@
          enddo
       enddo
 
+      nqstep_print = -1
       end
 
 !**************************************************************
@@ -79,7 +81,8 @@
 !     oldN is how many times we need to repeat this ops levels
 !     It represents the previous total number of levels
 
-      levels(numberOfOps) = qlevel
+      levels(numberOfOps)    = qlevel
+      maxLevels(numberOfOps) = qlevel
 
       kk=1
       do ii = 1,qlevel
@@ -213,13 +216,69 @@
       end
 
 !*******************************************************************
+      subroutine quantum_create_sigma_z(an,sigma_z)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer ii,jj,op_num,an,sigma_z
+      integer curState,tilingNumber
+
+      sigma_z = newHandleNumber
+      newHandleNumber = newHandleNumber+1
+
+      op_num = handle_to_op(an)
+      tilingNumber = oldN(op_num)
+      do jj=1,nstate
+         curState = state(op_num,mod(jj-1,tilingNumber)+1)
+         if(curState.eq.0) then
+            op_csr_a(jj,sigma_z) = 1
+         else
+            op_csr_a(jj,sigma_z) = -1
+         endif
+         op_csr_ja(jj,sigma_z) = jj
+         op_csr_ia(jj,sigma_z) = jj
+
+      enddo
+      op_csr_ia(nstate+1,sigma_z) = nstate+1
+
+      return
+      end
+
+!*******************************************************************
+      subroutine quantum_set_minimum_op(minimum_num,handle)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      integer minimum_num,handle
+      integer qlevel,quantN_local,ii,jj,kk,op_num
+
+      op_num = handle_to_op(handle)
+      maxLevels(op_num) = levels(op_num) + minimum_num
+
+      qlevel = levels(op_num)
+
+      quantN_local = oldN(op_num)/qlevel
+
+      kk=1
+      do ii = 1,qlevel
+         do jj = 1,quantN_local
+            state(op_num,kk) = ii-1+minimum_num
+            kk = kk + 1
+         enddo
+      enddo
+
+      return
+      end
+
+!*******************************************************************
       subroutine quantum_finalize_op_csr()
       implicit none
       include 'SIZE'
       include 'QUANT'
 
 
-      integer ii,jj,kk,tilingNumber,maxLevel,curState
+      integer ii,jj,kk,tilingNumber,maxLevel,curState,numLevel
       integer mat_offset,op_num,mat_bound,tmp_sum1,tmp_sum2
       real    value,dEh,eV,GHz
       logical foundState,foundState2
@@ -261,7 +320,8 @@ c      print*,'after check two',nid
 
 
       do ii=1,numberOfOps
-         maxLevel     = levels(ii)
+         maxLevel     = maxLevels(ii)
+         numLevel     = levels(ii)
          tilingNumber = oldN(ii)
          !!Possible change: this to nstate/np
          if(.not.is_vec(ii)) then
@@ -274,12 +334,16 @@ c      print*,'after check two',nid
 !     op_num = op, op_num+1 = op^dag, op_num+2 = op^dag*op
                
                op_csr_a(jj,op_num+2) = curState
+c$$$               if(mod(jj,maxLevel).eq.1) then
+c$$$                  op_csr_a(jj,op_num+2) = 0
+c$$$               endif
                op_csr_ja(jj,op_num+2) = jj
                op_csr_ia(jj,op_num+2) = jj
-               
+
                if(curState.lt.maxLevel-1) then
-                  mat_offset = oldN(ii)/maxLevel
+                  mat_offset = oldN(ii)/numLevel
                   mat_bound  = jj+mat_offset
+
                   op_csr_a(jj,op_num) = value
                   op_csr_ia(jj,op_num) = jj
                   op_csr_ja(jj,op_num) = mat_bound
@@ -656,6 +720,7 @@ c$$$      return
 c$$$      end
 
 
+!************************************************************
 !     Should be handle1 = left term of a rho a^\dagger, handle2 = part with rho, individually,
 !     such as a^\dagger a \rho 
 !************************************************************
@@ -1034,10 +1099,11 @@ c$$$      end
       ci = (0.0,1.0) 
 
 c$$$      do jj=1,nstate_np
+c$$$         rho_r(jj,jj)  = 1.0/7.0
+c$$$
 c$$$         do kk=1,nstate
 c$$$            drho(kk,jj) = 0.0
-c$$$            rho_r(kk,jj)  = 1.0
-c$$$            rho_i(kk,jj)  = 1.0
+c$$$!            rho_i(kk,jj)  = 1.0
 c$$$         enddo
 c$$$      enddo
 
@@ -1047,6 +1113,7 @@ c$$$      enddo
          xx = lin_mxm_op(2,iOp)
          scalar = lin_mxm_a(iOp)
 !xx*rho part
+
          call cem_quantum3_op_mxm(rho_r,tmp_r1,xx)
          call cem_quantum3_op_mxm(rho_i,tmp_i1,xx)
 
@@ -1065,11 +1132,11 @@ c$$$      enddo
      $        nstate_p,1,1,1,0)
          call gs_op_fields(gs_handle_q_H,tmpiv,nstate_p,1,1,1,0)
          
-!Add xx*rho + xx*rho to drho
+!Add xx*rho + (xx*rho)^\dagger to drho
          do jj = 1,nstate_np
             do ii = 1,nstate
                j0 = (jj-1)*nstate+ii
-               tmprr= tmprv(j0)
+               tmprr = tmprv(j0)
                if(ii.eq.jj+c_offset) tmprr = 2*tmp_r1(ii,jj)
                tmpii = 2*tmp_i1(ii,jj) - tmpiv(j0)
                if(ii.eq.jj+c_offset) tmpii = 0
@@ -1146,7 +1213,7 @@ c$$$      do ii=1,nstate
 c$$$         write(23,'(100g25.15)') (resrho_i(ii,jj), jj=1,nstate)
 c$$$      enddo
 c$$$
-
+c$$$      call exitt()
 
 
       end

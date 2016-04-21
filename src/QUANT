@@ -6,6 +6,7 @@
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
      $                , nstate_np,iiqstep,obsPrintSkip,newVecNumber
      $                , number_of_gates,generated_gates,current_gate
+     $                , nqstep_print
        integer         iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
      $                , newHandleNumber,quantN,numberOfOps,nTimeDep
@@ -14,6 +15,7 @@
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
      $                , nstate_np,iiqstep,obsPrintSkip,newVecNumber
      $                , number_of_gates,generated_gates,current_gate
+     $                , nqstep_print
 
 c!!! Temporary: level = nzmax, lnumqd=lin_max_ops lnumsp=maxOps
 
@@ -42,7 +44,7 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
        common /QPRAMIV/ iwork(5),ham_ia(maxN+1)
      $               , ham_ja(maxN*maxN/lp)
      $               , state(maxOp,maxN),initIndex(maxOp,2),oldN(maxOp)
-     $               , levels(maxOp),obs_handle(maxOp)
+     $               , levels(maxOp),maxLevels(maxOp),obs_handle(maxOp)
      $               , lin_offset(maxOp/2),lin_mxm_op(2,maxOp/2)
      $               , lin_l_index(2,maxN*maxN/lp,maxOp/2)
      $               , lin_nl_index(2,maxN,maxN/lp,maxOp/2)
@@ -67,7 +69,7 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
 
        integer         iwork,ham_ia,ham_ja
      $               , oldN,state
-     $               , levels,obs_handle,initIndex,lin_target
+     $               , levels,maxLevels,obs_handle,initIndex,lin_target
      $               , lin_nl_index
      $               , lin_l_length,lin_nl_col_length,lin_nl_length
      $               , lin_offset, lin_mxm_op
@@ -81,9 +83,9 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , first_handle
 
        common /QPRAMLO/ rwa,calc_concurrence,ifPulse,useGates
-     $               ,  is_vec(maxOp),ham_finalized
+     $               ,  is_vec(maxOp),ham_finalized,print_during_run
        logical          rwa,calc_concurrence,ifPulse,useGates
-     $               ,  is_vec,ham_finalized
+     $               ,  is_vec,ham_finalized,print_during_run
 
        common /QPRAMI8/ lin_disp(maxN,maxOp)
        integer*8        lin_disp
@@ -92,6 +94,7 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
        integer*8       glo_num_q_Hv,glo_num_q_concV !FIXME 12-17-14 Matt Otten: integer*8 does not work on blues
 
        common /QPRAMV/ work(maxN + 21*2*maxN*maxN/lp)
+     $               , work_ode(100+21*maxN*maxN/lp)     
      $               , ham_i(maxN*maxN/lp),ham_d(maxN*maxN/lp)
      $               , ham_a(maxN*maxN/lp),omega_quant(maxE)
      $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/lp,maxOp/2)
@@ -99,15 +102,16 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , op_csr_a(maxN*maxN/lp,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
      $               , tmprv(maxN*maxN/lp)
      $               , tmpiv(maxN*maxN/lp)
+     $               , rho_vec(2*maxN*maxN/lp)
      $               , pop_time(maxTimeSteps,maxOp/3)
      $               , obs_time(maxTimeSteps,maxOp/4)
      $               , observable(maxOp),obs_csr_a(maxN*10,maxOp/4)
      $               , quantum_gate_times(maxTimeSteps)
 
-       real            work,ham_i,ham_d,ham_a,lin_mxm_a
+       real            work,work_ode,ham_i,ham_d,ham_a,lin_mxm_a
      $               , lin_nl_a,lin_l_a,lin_scalar,obs_scalar
-     $               , omega_quant, op_csr_a,tmprv,tmpiv,pop_time
-     $               , obs_time, observable,obs_csr_a
+     $               , omega_quant, op_csr_a,tmprv,tmpiv,rho_vec
+     $               , pop_time,obs_time, observable,obs_csr_a
      $               , quantum_gate_times
 
        common /QPRAMC/ rho      (maxN,maxN/lp)

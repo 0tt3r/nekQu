@@ -17,9 +17,9 @@ export COMM_BACKEND=comm_mpi2
 export IO_BACKEND="rbIO_nekcem.o vtkbin.o coIO_nekcem.o coIO_nekcem_read.o io_util.o mpiio_util.o io_driver.o"
 
 #UNDERSCORE is added to avoid compilation error for the case #of jl2 (vs. liftn) -- complaining for redefined function.
-C_DEFINES="-g -Ktrap=fp -O0 -Dr8 -mcmodel=medium -Mlarge_arrays -DPTRSIZE8 -DMPIIO -DMPI -DMPISRC -DLONGINT8 -DNO_C_MAIN -DUNDERSCORE -DGLOBAL_LONG_LONG $C_DEFINES"
+C_DEFINES="-Ktrap=fp -O0 -Dr8 -mcmodel=medium -Mlarge_arrays -DPTRSIZE8 -DMPIIO -DMPI -DMPISRC -DLONGINT8 -DNO_C_MAIN -DUNDERSCORE -DGLOBAL_LONG_LONG $C_DEFINES"
 CXX_DEFINES="-DMPICH_IGNORE_CXX_SEEK"
-FORTRAN_DEFINES="$FORTRAN_DEFINES -DMPI -mcmodel=medium -Mlarge_arrays"
+FORTRAN_DEFINES="$FORTRAN_DEFINES -DMPI -mcmodel=medium -Mlarge_arrays -Kieee"
 
 export F77="mpif77 -pg -I$BASEDIR/examples/include  -I$BASEDIR/src  $FORTRAN_DEFINES"
 export CC="mpicc $C_DEFINES"
@@ -31,7 +31,7 @@ export EXTRALIBS=""
 export LAPACK="-llapack -lblas "
 export LD="mpif77 -pg"
 OPT_FULL="-O3"
-OPT_DEBUG="-g -O0 -Mbounds"
+OPT_DEBUG="-g -O0 "
 
 export HPMFLAGS=""
 export ARPACKLIBDIR=""

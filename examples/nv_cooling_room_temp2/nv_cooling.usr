@@ -1,4 +1,4 @@
-Cfo----------------------------------------------------------------------
+C----------------------------------------------------------------------
 c
 c  USER SPECIFIED ROUTINES:
 c
@@ -79,10 +79,10 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       Te2 = 6*ns   !Excited state longitudinal spin relaxation
       Tg1 = 100*us !Ground state transverse spin relaxation
       Q   = 10**6  !Mechanical resonator quality factor
-      Q   = 10**4 !Q factor artifical - 3 phonons
+      Q   = 10**3 !Q factor artifical - 3 phonons
 
       N_th = 6547 ! Room temperature
-      N_th = 20  !Very cold
+      N_th = 4  !Very cold
 
       
 !Initial state 1/3 1/3 1/3 in ground state 10 in phonon
@@ -96,11 +96,11 @@ c$$$      nqstep      = 18000
 
       call quantum_setup_initialize()
 
-      timemax     = 0.5e-5/timeunit
-      nqstep      = 950000
-      nqstep_print = 45000
+      timemax     = 0.1e-5/timeunit
+      nqstep      = 50000
+      nqstep_print = 4500
       print_during_run = .true.
-      num_phon = 32
+      num_phon = 8
 
 
 

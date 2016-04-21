@@ -10,7 +10,7 @@ import glob
 from timeit import default_timer as timer
 
 
-for i in np.arange(5.25,5.5,0.01):
+for i in np.arange(5.35,5.65,0.05):
 
     np.savetxt('quantInput',[i],newline=' ',fmt='%f')
     subprocess.call(["../../bin/nek",'4'])

@@ -1,4 +1,4 @@
-# master makefile. Includes elements common to all platforms. Platform-specific information should be put in the appropriate makefile.arch 
+# master makefile. Includes elements common to all platforms. Platform
 
 ###############################################################################
 L        =
@@ -13,7 +13,7 @@ JL       = -DAMG_DUMP
 # core nekton files ...
 #
 #
-CORE = driveQ.o \
+CORE = driveQ.o  \
 subuser.o comm_mpi2.o quantum_debug.o\
 quantum_csr.o quantum_setup.o quantum_time.o\
 math_routines.o
@@ -63,7 +63,7 @@ HMT   = #-DHPM -Dr8 -DDEBUG -DMPISRC -DSINGLE_DIR # -DBLAS
 ###
 FL0   = $(L0) $(HMT) $(P)
 FL2   = $(L2) $(HMT) $(P)
-FL3   = $(L3) $(HMT) $(P) -C -g 
+FL3   = $(L3) $(HMT) $(P) -g 
 FL4   = $(L4) $(HMT) $(P)
 
 ###
@@ -157,6 +157,7 @@ quantum_setup.o :$S/quantum_setup.F;    $(F77) -c $(FL3) $<
 quantum_time.o  :$S/quantum_time.F;     $(F77) -c $(FL3) $<
 quantum_debug.o :$S/quantum_debug.F;    $(F77) -c $(FL3) $<
 quantum_csr.o   :$S/quantum_csr.F;      $(F77) -c $(FL3) $<
+ode.o           :$S/ode.F;              $(F77) -c $(FL3) $<
 comm_mpi2.o	:$S/comm_mpi2.F;	$(F77) -c $(FL2) $<
 xxt.o           :$(J)/xxt.c;             $(CC) -c $(cFL2) $(JL) $< 
 comm.o          :$(J)/comm.c;            $(CC) -c $(cFL2) $(JL) $< 

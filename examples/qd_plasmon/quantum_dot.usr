@@ -21,7 +21,9 @@ c-----------------------------------------------------------------------
       real omega,g_couple,eV,gamma_di,gamma_pi,gamma_s,mu_s,mu_q
       real c_speed,d_per_au,eesu_per_au,eps_med,fluence,tmpint
       real omega2,debye,omega3,radius,g_couple2,g_couple3
+      real N_th,prefactor
       integer qd1,qd1t,qd1n,sp,spt,spn,numsp
+      integer sp_spt
       integer qd2,qd2t,qd2n,ii,jj,kk,j0
       integer qd1t_sp,qd1_spt,sp2,sp2t,sp2n
       integer qd2t_sp,qd2_spt,ierr,qd2t_sp2,qd2_sp2t
@@ -42,10 +44,10 @@ c-----------------------------------------------------------------------
 
       omega    = 2.05/eV    
       omega2   = 2.05/eV
-      
+      gamma_s  = 6.6e-3*omega2
       g_couple  = 30*1e-3/eV
 
-      fluence = 0*1e-9*1e7
+      fluence = 1e-9*1e7
 
 
       call quantum_setup_initialize()     
@@ -65,9 +67,9 @@ c-----------------------------------------------------------------------
       pi          = 4.*ATAN(1.0)
       pulse_duration = 2e-14/timeunit
       timemax     = 25e-13/timeunit
-      nqstep      = 10000
+      nqstep      = 25000
       pulse_t_0     = 1e-13/timeunit
-      numsp       = 4
+      numsp       = 64
       ltonq       = 4
 
       tmpint = 5e-1 * sqrt(5d-1 * pi/(2d0*log(2d0)/pulse_duration**2))
@@ -77,15 +79,20 @@ c-----------------------------------------------------------------------
       energy0_pls = energy0_pls / eesu_per_au
       print*,'energy0_pls',energy0_pls,mu_s,mu_q
 
-      ifPulse          = .true.
-      rwa              = .true.
-      calc_concurrence = .true.
-      
+      print_during_run = .true.
+      ifPulse          = .false.
+!      rwa              = .true.
+      call quantum_create_op(numsp,sp,spt,spn)      
       call quantum_create_op(2,qd1,qd1t,qd1n)
-      call quantum_create_op(numsp,sp,spt,spn)
 
+!      call quantum_set_minimum_op(1,spn)
       call quantum_finalize_op_csr()
 
+c$$$      call quantum_print_csr(spn)
+c$$$      print*,'spt'
+c$$$      call quantum_print_csr(spt)
+
+      call quantum_combine_op_csr(sp,spt,1,sp_spt)
       call quantum_combine_op_csr(qd1t,sp,1,qd1t_sp)
 
       call quantum_combine_op_csr(qd1,spt,1,qd1_spt)
@@ -103,14 +110,23 @@ c-----------------------------------------------------------------------
       call quantum_add_to_ham_csr(sp_a_spt,-mu_s,1)
 
       !Coupling terms
-      call quantum_add_to_ham_csr(qd1t_sp,-g_couple,0)
-      call quantum_add_to_ham_csr(qd1_spt,-g_couple,0)
+c$$$      call quantum_add_to_ham_csr(qd1t_sp,-g_couple,0)
+c$$$      call quantum_add_to_ham_csr(qd1_spt,-g_couple,0)
 
       call quantum_ham_finalize_csr()
       call quantum_print_ham()
 
       call quantum_lin_add(qd1,qd1n,-gamma_pi/2)
-      call quantum_lin_add(qd1n,qd1n,-gamma_di)
+
+!      call quantum_lin_add(qd1n,qd1n,-gamma_di)
+
+      N_th = 16
+      prefactor = gamma_s/4*(N_th+1)
+      call quantum_lin_add(sp,spn,-prefactor)
+c$$$
+
+      prefactor = gamma_s/4*(N_th)
+      call quantum_lin_add(spt,sp_spt,-prefactor)
 
       call quantum_lin_add(sp,spn,-gamma_s/2)
 
@@ -121,7 +137,7 @@ c-----------------------------------------------------------------------
       call quantum_observable(qd1_a_qd1t,mu_q)
 
       call cem_quantum3_propagation_rk
-
+!      call cem_quantum3_propagation_pece
       return
       end
 

@@ -19,20 +19,19 @@ c-----------------------------------------------------------------------
 
       !Create variables to store operators
       !p = +, m = -
-      !gpgp => |g+><g+|, gmgm => |g-><g-|, g0g0 => |g0><g0|, etc
-      !nv hold all the vector state:
-      !nv(1) = |g0> = g0, nv(2)=|e+>=ep, nv(3)=|e->=em
 
       integer a,at,an,a_at,b,bt,bn,bt_a,b_at,b_a_bt,ierr
       
-      integer N_th,num_phon !number of phonons
+      integer N_th,num_phon,sigma_z !number of phonons
       !parameters
-      real w_m,Q,prefactor,w_atom,rabi_freq
+      real w_m,Q,prefactor,w_atom,rabi_freq,ev
       real tmpint,fluence,c_speed,eesu_per_au
 
       !Units
-      real kHz,MHz,GHz,THz,ns,us,d
+      real kHz,MHz,GHz,THz,ns,us,d,gamma_di,g,delta
 
+
+      eV       = 27.21140                ! energy Eh  
       GHz = 1.519827e-7 !In AU
       MHz = GHz*1e-3
       kHz = MHz*1e-3
@@ -61,13 +60,17 @@ c-----------------------------------------------------------------------
       np=1
       nid=0
 #endif      
-      w_m = 5.4*GHz !resonator frequency
+
+      w_m = 5.4*GHz
       Q   = 10**4  !resonator quality factor
       rabi_freq = 3*MHz
+      delta      = 100*MHz
+      g          = sqrt(rabi_freq**2 + delta**2)
       w_atom = 5.5*GHz !Atom frequency
+!      w_atom = 2.05/eV
       d = 7980 !In atomic units
 
-      N_th = 15 !Thermal population
+      N_th = 150 !Thermal population
 
 
 !Initial state 1/3 1/3 1/3 in ground state 10 in phonon
@@ -79,22 +82,33 @@ c-----------------------------------------------------------------------
 c$$$      timemax     = 0.3e-6/timeunit
 c$$$      nqstep      = 18000
 
-      timemax     = 10e-10/timeunit
-      nqstep      = 10000
+      timemax     = 2e-6/timeunit
+      nqstep      = int(2e-6/1e-11)
 
-
-
-      num_phon = 16
+      num_phon = 32
 
       pulse_omega_0 = pulse_omega_0*GHz
+      pulse_omega_0 = w_atom
+      pulse_duration = 1e-9/timeunit
+      pulse_t_0      = 1e-9/timeunit
+      Emin = pulse_omega_0-0.5*GHz
+      Emax = pulse_omega_0+0.5*GHz
+      nEh = 100
 
-      pulse_duration = 100e-2/timeunit
-      pulse_t_0      = -1e-12/timeunit
-      Emin = pulse_omega_0!-0.5*GHz
-      Emax = pulse_omega_0!+0.5*GHz
-      nEh = 1
 
-      fluence = 1e-10*1d7
+      gamma_di = 30*MHz
+
+!      pulse_omega_0  = w_atom
+!      pulse_duration = 100e-1/timeunit
+!      timemax     = 45e-9/timeunit
+!      nqstep      = 50000
+!      pulse_t_0     = -1e-9/timeunit
+
+c$$$      Emax = 2.14/eV
+c$$$      Emin = 1.94/eV
+c$$$      nEh  = 100
+
+      fluence = 1e-20*1d7
       c_speed = 2.99792458d10 !cm/s
 
       eesu_per_au = 5.14220652d17 / c_speed
@@ -107,14 +121,15 @@ c$$$      nqstep      = 18000
 
       print*,'energy0_pls',energy0_pls
 
-      rwa     = .true.
-      ifpulse = .true.
+!      ifpulse = .true.
+!      rwa     = .true.
+      print_during_run = .true.
 
 !     Create basic operators
 
       call quantum_create_op(num_phon,a,at,an) 
       call quantum_create_op(2,b,bt,bn)
-
+!      call quantum_set_minimum_op(1,an)
       call quantum_finalize_op_csr()
 
       call quantum_combine_op_csr(a,at,1,a_at)
@@ -123,16 +138,22 @@ c$$$      nqstep      = 18000
        !Oscillator terms
       !w_m at a
       call quantum_add_to_ham_csr(an,w_m,0)      
+      call quantum_create_sigma_z(bn,sigma_z)
       !w_atom bt b
       call quantum_add_to_ham_csr(bn,w_atom,0)
+!      call quantum_add_to_ham_csr(sigma_z,w_atom/2,0)
 
-      !ele
       call quantum_add_to_ham_csr(b_a_bt,-d,1)
+
       call quantum_combine_op_csr(bt,a,1,bt_a)
       call quantum_combine_op_csr(b,at,1,b_at)
 
-      call quantum_add_to_ham_csr(bt_a,rabi_freq,0)
-      call quantum_add_to_ham_csr(b_at,rabi_freq,0)
+
+      call quantum_add_to_ham_csr(bt_a,g,0)
+      call quantum_add_to_ham_csr(b_at,g,0)
+
+c$$$      call quantum_add_to_ham_csr(bt_a,rabi_freq,0)
+c$$$      call quantum_add_to_ham_csr(b_at,rabi_freq,0)
 
       call quantum_ham_finalize_csr()
 
@@ -141,14 +162,14 @@ c$$$      nqstep      = 18000
       
       
       !resonator dissipation - What about this factor of 2?
-      prefactor = (w_m/(Q)*(N_th+1))
+      prefactor = (w_m/(2*Q)*(N_th+1))
       print*,prefactor
       call quantum_lin_add(a,an,-prefactor)
 !      print*,'after lin_add'
-      prefactor = (w_m/(Q)*(N_th))
+      prefactor = (w_m/(2*Q)*(N_th))
       print*,prefactor
       call quantum_lin_add(at,a_at,-prefactor)
-
+      call quantum_lin_add(b,bn,-gamma_di)      
 !      call quantum_lin_add_trans(a,an,-prefactor)
 !      print*,'after lin_add2'
 
@@ -169,8 +190,8 @@ c-----------------------------------------------------------------------
 
       alpha = 2 * log(2.0)/ (pulse_duration)**2
       if(rwa.eqv..true.) then
-         pulse = 5e-13!energy0_pls
-!     $      /2.0*xp(-alpha*(time-pulse_t_0)**2)
+         pulse = energy0_pls
+     $        /2.0*exp(-alpha*(time-pulse_t_0)**2)
       else
          pulse = 1e-9*exp(-alpha*(time-pulse_t_0)**2)
      $        *cos(pulse_omega_0*time)
