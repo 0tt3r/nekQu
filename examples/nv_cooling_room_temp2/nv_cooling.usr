@@ -24,13 +24,21 @@ c-----------------------------------------------------------------------
       !nv(1) = |g+> = gp, nv(2)=|g0>=g0, nv(3)=|g->=gm
       !nv(4) = |e+> = ep, nv(5)=|e0>=e0, nv(6)=|e->=em
       !nv(7) = |s>  = s
-      integer nv(7),gp,g0,gm,ep,e0,em,s
-      integer gpgp,epep,e0e0,emem,ss,g0gm,gmg0,gmgp,gpgm
-      integer emep,epem,epgp,e0g0,gmem,gpep,emgm,gmgm,g0g0
-      integer sep,sem,gms,gps,g0e0,se0,g0s,g0gp,gpg0
+      integer num_nv
+      parameter (num_nv = 2)
+      integer nv(7,num_nv),gp(num_nv),g0(num_nv),gm(num_nv)
+      integer ep(num_nv),e0(num_nv),em(num_nv),s(num_nv)
+      integer gpgp(num_nv),epep(num_nv),e0e0(num_nv)
+      integer emem(num_nv),ss(num_nv),g0gm(num_nv)
+      integer gmg0(num_nv),gmgp(num_nv),gpgm(num_nv)
+      integer emep(num_nv),epem(num_nv),epgp(num_nv),e0g0(num_nv)
+      integer gmem(num_nv),gpep(num_nv),emgm(num_nv),gmgm(num_nv)
+      integer g0g0(num_nv),gpg0(num_nv)
+      integer sep(num_nv),sem(num_nv),gms(num_nv),gps(num_nv)
+      integer g0e0(num_nv),se0(num_nv),g0s(num_nv),g0gp(num_nv)
       integer a,at,an,a_at,a_p_at
-      integer sig_g1,sig_g2,sig_e1,sig_e2
-      
+      integer sig_e1(num_nv),sig_e2(num_nv)
+      integer i,j
       
       integer N_th,num_phon !number of phonons
       !parameters
@@ -102,54 +110,61 @@ c$$$      nqstep      = 18000
       print_during_run = .true.
       num_phon = 8
 
-
+      do i=1,7
+         nv(i,1) = i
+         nv(i,2) = -2*i
+      enddo
 
 !     Create basic operators
 
       call quantum_create_op(num_phon,a,at,an)  
-      call quantum_create_vec(7,nv)  
-
+      do i=1,num_nv
+         call quantum_create_vec(7,nv(1,i))  
+      enddo
 
       call quantum_finalize_op_csr()
 
-      gp = nv(1) !|g+>
-      g0 = nv(2) !|g0>
-      gm = nv(3) !|g->
-      ep = nv(4) !|e+>
-      e0 = nv(5) !|e0>
-      em = nv(6) !|e->
-      s  = nv(7) !|s>
 
+      do i=1,num_nv
+         gp(i) = nv(1,i)             !|g+>
+         g0(i) = nv(2,i)             !|g0>
+         gm(i) = nv(3,i)             !|g->
+         ep(i) = nv(4,i)             !|e+>
+         e0(i) = nv(5,i)             !|e0>
+         em(i) = nv(6,i)             !|e->
+         s(i)  = nv(7,i)             !|s>
+      enddo
 
 !     Combine vec operators to get terms for the hamiltonian/lindblad
-      call quantum_combine_vec(gp,gp,gpgp)
-      call quantum_combine_vec(ep,ep,epep)
-      call quantum_combine_vec(e0,e0,e0e0)
-      call quantum_combine_vec(em,em,emem)
-      call quantum_combine_vec(s,s,ss)
-      call quantum_combine_vec(g0,gm,g0gm)
-      call quantum_combine_vec(gm,g0,gmg0)
-      call quantum_combine_vec(gm,gp,gmgp)
-      call quantum_combine_vec(gp,gm,gpgm)
-      call quantum_combine_vec(em,ep,emep)
-      call quantum_combine_vec(ep,em,epem)
-      call quantum_combine_vec(ep,gp,epgp)
-      call quantum_combine_vec(e0,g0,e0g0)
-      call quantum_combine_vec(gm,em,gmem)
-      call quantum_combine_vec(gp,ep,gpep)
-      call quantum_combine_vec(em,gm,emgm)
-      call quantum_combine_vec(gm,gm,gmgm)
-      call quantum_combine_vec(g0,g0,g0g0)
-      call quantum_combine_vec(s,ep,sep)
-      call quantum_combine_vec(s,em,sem)
-      call quantum_combine_vec(gm,s,gms)
-      call quantum_combine_vec(gp,s,gps)
-      call quantum_combine_vec(s,e0,se0)
-      call quantum_combine_vec(g0,s,g0s)
-      call quantum_combine_vec(g0,e0,g0e0)
-      call quantum_combine_vec(g0,gp,g0gp)
-      call quantum_combine_vec(gp,g0,gpg0)
-
+      do i=1,num_nv
+         call quantum_combine_vec(gp(i),gp(i),gpgp(i))
+         call quantum_combine_vec(ep(i),ep(i),epep(i))
+         call quantum_combine_vec(e0(i),e0(i),e0e0(i))
+         call quantum_combine_vec(em(i),em(i),emem(i))
+         call quantum_combine_vec(s(i),s(i),ss(i))
+         call quantum_combine_vec(g0(i),gm(i),g0gm(i))
+         call quantum_combine_vec(gm(i),g0(i),gmg0(i))
+         call quantum_combine_vec(gm(i),gp(i),gmgp(i))
+         call quantum_combine_vec(gp(i),gm(i),gpgm(i))
+         call quantum_combine_vec(em(i),ep(i),emep(i))
+         call quantum_combine_vec(ep(i),em(i),epem(i))
+         call quantum_combine_vec(ep(i),gp(i),epgp(i))
+         call quantum_combine_vec(e0(i),g0(i),e0g0(i))
+         call quantum_combine_vec(gm(i),em(i),gmem(i))
+         call quantum_combine_vec(gp(i),ep(i),gpep(i))
+         call quantum_combine_vec(em(i),gm(i),emgm(i))
+         call quantum_combine_vec(gm(i),gm(i),gmgm(i))
+         call quantum_combine_vec(g0(i),g0(i),g0g0(i))
+         call quantum_combine_vec(s(i),ep(i),sep(i))
+         call quantum_combine_vec(s(i),em(i),sem(i))
+         call quantum_combine_vec(gm(i),s(i),gms(i))
+         call quantum_combine_vec(gp(i),s(i),gps(i))
+         call quantum_combine_vec(s(i),e0(i),se0(i))
+         call quantum_combine_vec(g0(i),s(i),g0s(i))
+         call quantum_combine_vec(g0(i),e0(i),g0e0(i))
+         call quantum_combine_vec(g0(i),gp(i),g0gp(i))
+         call quantum_combine_vec(gp(i),g0(i),gpg0(i))
+      enddo
 
       call quantum_combine_op_csr(a,at,1,a_at)
 
@@ -159,7 +174,8 @@ c$$$      nqstep      = 18000
       !w_m |g+><g+|
 !      call quantum_add_to_ham_csr(gpgp,w_m,0)
       !(E_e + w_m) |e+><e+|
-      call quantum_add_to_ham_csr(epep,(E_e+w_m),0)
+      do i=1,num_nv
+         call quantum_add_to_ham_csr(epep(i),(E_e+w_m),0)
       !(E_e - D_e) |e0><e0|
 !      call quantum_add_to_ham_csr(e0e0,(E_e-D_e),0)
       !E_e |e-><e-|
@@ -168,9 +184,9 @@ c$$$      nqstep      = 18000
 !      call quantum_add_to_ham_csr(ss,E_s,0)
 
       !Magnetic field driving term Omega/2(|g0><g-| + |g-><g0|)
-      call quantum_add_to_ham_csr(g0gm,omega/2,0)
-      call quantum_add_to_ham_csr(gmg0,omega/2,0)
-
+         call quantum_add_to_ham_csr(g0gm(i),omega/2,0)
+         call quantum_add_to_ham_csr(gmg0(i),omega/2,0)
+      enddo
       !Sigma_g term = lambda_g (|g-><g+| + |g+><g-|) (a+at)
       call quantum_combine_op_csr(a,at,0,a_p_at)
 
@@ -181,11 +197,12 @@ c$$$      call quantum_add_to_ham_csr(sig_g1,lambda_g,0)
 c$$$      call quantum_add_to_ham_csr(sig_g2,lambda_g,0)      
 
       !Sigma_e term = lambda_e (|e-><e+| + |e+><e-|)(a+at)
-      call quantum_combine_op_csr(emep,a_p_at,1,sig_e1)
-      call quantum_combine_op_csr(epem,a_p_at,1,sig_e2)
-      call quantum_add_to_ham_csr(sig_e1,lambda_s,0)      
-      call quantum_add_to_ham_csr(sig_e2,lambda_s,0)     
-
+      do i=1,num_nv
+         call quantum_combine_op_csr(emep(i),a_p_at,1,sig_e1(i))
+         call quantum_combine_op_csr(epem(i),a_p_at,1,sig_e2(i))
+         call quantum_add_to_ham_csr(sig_e1(i),lambda_s,0)      
+         call quantum_add_to_ham_csr(sig_e2(i),lambda_s,0)     
+      enddo
       call quantum_ham_finalize_csr()
 
       call quantum_print_ham()
@@ -197,48 +214,49 @@ c$$$      call quantum_add_to_ham_csr(sig_g2,lambda_g,0)
 
       !Gamma_opt terms
       !-Gamma_opt/2 * sum_{i=+,0,-} L_{gi,ei}
-      call quantum_lin_add(epgp,gpgp,-gamma_opt/2)
-      call quantum_lin_add(emgm,gmgm,-gamma_opt/2)
-      call quantum_lin_add(e0g0,g0g0,-gamma_opt/2)
+      do i=1,num_nv
+         call quantum_lin_add(epgp(i),gpgp(i),-gamma_opt/2)
+         call quantum_lin_add(emgm(i),gmgm(i),-gamma_opt/2)
+         call quantum_lin_add(e0g0(i),g0g0(i),-gamma_opt/2)
       
       !k42 terms
       !-k42/2 * sum_{i=+,-} L_{ei,gi}
-      call quantum_lin_add(gpep,epep,-k42/2)
-      call quantum_lin_add(gmem,emem,-k42/2)
+         call quantum_lin_add(gpep(i),epep(i),-k42/2)
+         call quantum_lin_add(gmem(i),emem(i),-k42/2)
 
       !k45 terms
       !-k45/2 * sum_{i=+,-} L_{ei,s}
-      call quantum_lin_add(sem,emem,-k45/2)
-      call quantum_lin_add(sep,epep,-k45/2)
+         call quantum_lin_add(sem(i),emem(i),-k45/2)
+         call quantum_lin_add(sep(i),epep(i),-k45/2)
 
       !k52 terms
       !-k52/2 * sum_{i=+,-} L_{s,gi}
-      call quantum_lin_add(gms,ss,-k52/2)
-      call quantum_lin_add(gps,ss,-k52/2)
+         call quantum_lin_add(gms(i),ss(i),-k52/2)
+         call quantum_lin_add(gps(i),ss(i),-k52/2)
 
       !k31 term
       !-k31/2 L_{e0,g0}
-      call quantum_lin_add(g0e0,e0e0,-k31/2)
+         call quantum_lin_add(g0e0(i),e0e0(i),-k31/2)
 
       !k35 term
       !-k35/2 L_{e0,s}
-      call quantum_lin_add(se0,e0e0,-k35/2)
+         call quantum_lin_add(se0(i),e0e0(i),-k35/2)
 
       !k51 term
       !-k51/2 L_{s,g0}
-      call quantum_lin_add(g0s,ss,-k51/2)
+         call quantum_lin_add(g0s(i),ss(i),-k51/2)
 
       !T^g_2 term
       !-1/(2*T^g_2) sum_{i=g+,g-} L_{i,i}
-      call quantum_lin_add(gpgp,gpgp,-1/(2*tg2))
-      call quantum_lin_add(gmgm,gmgm,-1/(2*tg2))
+         call quantum_lin_add(gpgp(i),gpgp(i),-1/(2*tg2))
+         call quantum_lin_add(gmgm(i),gmgm(i),-1/(2*tg2))
       
       !T^e_2 term
       !-1/(2*T^e_2) sum_{i=e+,e-} L_{i,i}
-      call quantum_lin_add(epep,epep,-1/(2*te2))
-      call quantum_lin_add(e0e0,e0e0,-1/(2*te2))
-      call quantum_lin_add(emem,emem,-1/(2*te2))
-
+         call quantum_lin_add(epep(i),epep(i),-1/(2*te2))
+         call quantum_lin_add(e0e0(i),e0e0(i),-1/(2*te2))
+         call quantum_lin_add(emem(i),emem(i),-1/(2*te2))
+         
       !T^g_1 term
       !-1/(2*T^g_1) sum_{i=+,0,-} sum_{j=+,0,-} (1-delta_ij) L_{gi,gj}
 c$$$      call quantum_lin_add(gpgm,gmgm,-1/(2*tg1))
@@ -247,6 +265,8 @@ c$$$      call quantum_lin_add(g0gp,gpgp,-1/(2*tg1))
 c$$$      call quantum_lin_add(g0gm,gmgm,-1/(2*tg1))
 c$$$      call quantum_lin_add(gmgp,gpgp,-1/(2*tg1))
 c$$$      call quantum_lin_add(gmg0,g0g0,-1/(2*tg1))
+      enddo
+
 
       !Mechanical resonator dissipation
       prefactor = w_m/(2*Q)*(N_th+1)
