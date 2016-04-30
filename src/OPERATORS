@@ -1,0 +1,6 @@
+      Common /QPRAMOP/ nv,nvt,nvn,nv_p_nvt,a,at,an,a_at,a_p_at
+     $     , sig_g1,sig_g2,sig_e1,sig_e2,nv_nvt
+
+      integer nv,nvt,nvn,nv_p_nvt,a,at,an,a_at,a_p_at
+     $     , sig_g1,sig_g2,sig_e1,sig_e2,nv_nvt
+
