@@ -25,7 +25,7 @@ c-----------------------------------------------------------------------
       !nv(4) = |e+> = ep, nv(5)=|e0>=e0, nv(6)=|e->=em
       !nv(7) = |s>  = s
       integer num_nv
-      parameter (num_nv = 2)
+      parameter (num_nv = 1)
       integer nv(7,num_nv),gp(num_nv),g0(num_nv),gm(num_nv)
       integer ep(num_nv),e0(num_nv),em(num_nv),s(num_nv)
       integer gpgp(num_nv),epep(num_nv),e0e0(num_nv)
@@ -69,9 +69,9 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       us = 1e-6/timeunit
       
       w_m = 475*MHz*2*pi !Mechanical resonator frequency
-      E_e = 0*480*THz !NV center excited state energy
-      E_s = 0*370*THz !Nv center singlet energy
-      D_e = 0*1.42*GHz !Used to be 1.52? NV excited state zero field splitting
+      E_e = 0*480*THz*2*pi !NV center excited state energy
+      E_s = 0*370*THz*2*pi !Nv center singlet energy
+      D_e = 0*1.42*GHz*2*pi !Used to be 1.52? NV excited state zero field splitting
       Omega = 60*MHz*2*pi !Magnetic driving field
       gamma_opt = 130*MHz !Optical pumping rate
       lambda_s = 1000*1.06*kHz*2*pi
@@ -85,12 +85,12 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       k51 = 3.00*MHz !Relaxation from singlet to ground
       Tg2 = 59*ns !Ground state longitudinal spin relaxation
       Te2 = 6*ns   !Excited state longitudinal spin relaxation
-      Tg1 = 100*us !Ground state transverse spin relaxation
+!      Tg1 = 100*us !Ground state transverse spin relaxation
       Q   = 10**6  !Mechanical resonator quality factor
-      Q   = 10**3 !Q factor artifical - 3 phonons
+      Q   = 10**6
+ !Q factor artifical - 3 phonons
 
-      N_th = 6547 ! Room temperature
-      N_th = 4  !Very cold
+      N_th = 2  !Very cold
 
       
 !Initial state 1/3 1/3 1/3 in ground state 10 in phonon
@@ -104,16 +104,11 @@ c$$$      nqstep      = 18000
 
       call quantum_setup_initialize()
 
-      timemax     = 0.1e-5/timeunit
-      nqstep      = 50000
-      nqstep_print = 4500
+      timemax     = 100.e-6/timeunit
+      nqstep      = 10000000
+      nqstep_print = 3000
       print_during_run = .true.
-      num_phon = 8
-
-      do i=1,7
-         nv(i,1) = i
-         nv(i,2) = -2*i
-      enddo
+      num_phon = 16
 
 !     Create basic operators
 
@@ -272,7 +267,7 @@ c$$$      call quantum_lin_add(gmg0,g0g0,-1/(2*tg1))
       prefactor = w_m/(2*Q)*(N_th+1)
       call quantum_lin_add(a,an,-prefactor)
 !      print*,'after lin_add'
-      prefactor = w_m/(2*Q) *N_th
+      prefactor = w_m/(2*Q)*N_th
       call quantum_lin_add(at,a_at,-prefactor)
 
 !      call quantum_lin_add_trans(a,an,-prefactor)
@@ -280,6 +275,7 @@ c$$$      call quantum_lin_add(gmg0,g0g0,-1/(2*tg1))
 
       call quantum_lin_finalize()
 !      call cem_quantum3_propagation_exp
+!      call cem_quantum3_steadystate_gmres
       call cem_quantum3_propagation_rk
 !      call cem_quantum3_propagation_pece
       return

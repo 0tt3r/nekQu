@@ -6,7 +6,7 @@
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
      $                , nstate_np,iiqstep,obsPrintSkip,newVecNumber
      $                , number_of_gates,generated_gates,current_gate
-     $                , nqstep_print
+     $                , nqstep_print,nstate2_2
        integer         iqstep,nqstep,nstate,nstate_p,gs_handle_q_H
      $                , gs_handle_q_conc,maxPartialTrace,ham_nnz
      $                , newHandleNumber,quantN,numberOfOps,nTimeDep
@@ -15,7 +15,10 @@
      $                , numObservables,nEh,mpi_win_c,num_nl_lin_ops
      $                , nstate_np,iiqstep,obsPrintSkip,newVecNumber
      $                , number_of_gates,generated_gates,current_gate
-     $                , nqstep_print
+     $                , nqstep_print,nstate2_2
+
+       Common /QPRAMSS/ max_iter
+       integer max_iter
 
 c!!! Temporary: level = nzmax, lnumqd=lin_max_ops lnumsp=maxOps
 
@@ -55,8 +58,8 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , ham_i_ja(maxN*maxN/lp),ham_d_ja(maxN*maxN/lp)
      $               , op_csr_ja(maxN*maxN/lp,maxOp),ham_d_ia(maxN+1)
      $               , j0_array(maxN*maxN/lp)
-     $               , obs_csr_ia(maxN*10+1,maxOp)
-     $               , obs_csr_ja(maxN*10,maxOp)
+     $               , obs_csr_ia(maxN*maxN/lp+1,maxOp)
+     $               , obs_csr_ja(maxN*maxN/lp,maxOp)
      $               , vec_state(maxOp), vec_to_op(maxOp)
      $               , vec_state2(maxOp),handle_to_op(maxOp)
      $               , quantum_gate_coo_ia(2*maxN)
@@ -84,8 +87,10 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
 
        common /QPRAMLO/ rwa,calc_concurrence,ifPulse,useGates
      $               ,  is_vec(maxOp),ham_finalized,print_during_run
+     $               ,  steady_state
        logical          rwa,calc_concurrence,ifPulse,useGates
      $               ,  is_vec,ham_finalized,print_during_run
+     $               ,  steady_state
 
        common /QPRAMI8/ lin_disp(maxN,maxOp)
        integer*8        lin_disp
@@ -102,17 +107,22 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , op_csr_a(maxN*maxN/lp,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
      $               , tmprv(maxN*maxN/lp)
      $               , tmpiv(maxN*maxN/lp)
-     $               , rho_vec(2*maxN*maxN/lp)
      $               , pop_time(maxTimeSteps,maxOp/3)
      $               , obs_time(maxTimeSteps,maxOp/4)
-     $               , observable(maxOp),obs_csr_a(maxN*10,maxOp/4)
+     $               , observable(maxOp),obs_csr_a(maxN*maxN/lp,maxOp/4)
      $               , quantum_gate_times(maxTimeSteps)
+     $               , r_cg(2*maxN*maxN/lp),p_cg(2*maxN*maxN/lp)
+     $               , x_cg(2*maxN*maxN/lp),Ap_cg(2*maxN*maxN/lp)
+     $               , w_gm(2*maxN*maxN/lp)
+     
+
 
        real            work,work_ode,ham_i,ham_d,ham_a,lin_mxm_a
      $               , lin_nl_a,lin_l_a,lin_scalar,obs_scalar
-     $               , omega_quant, op_csr_a,tmprv,tmpiv,rho_vec
+     $               , omega_quant, op_csr_a,tmprv,tmpiv
      $               , pop_time,obs_time, observable,obs_csr_a
      $               , quantum_gate_times
+     $               , r_cg,p_cg,x_cg,Ap_cg,w_gm
 
        common /QPRAMC/ rho      (maxN,maxN/lp)
      $               , drho     (maxN,maxN/lp)

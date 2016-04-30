@@ -69,7 +69,7 @@ c-----------------------------------------------------------------------
       timemax     = 25e-13/timeunit
       nqstep      = 25000
       pulse_t_0     = 1e-13/timeunit
-      numsp       = 64
+      numsp       = 4
       ltonq       = 4
 
       tmpint = 5e-1 * sqrt(5d-1 * pi/(2d0*log(2d0)/pulse_duration**2))
@@ -88,10 +88,10 @@ c-----------------------------------------------------------------------
 !      call quantum_set_minimum_op(1,spn)
       call quantum_finalize_op_csr()
 
-c$$$      call quantum_print_csr(spn)
-c$$$      print*,'spt'
-c$$$      call quantum_print_csr(spt)
-
+      call quantum_print_csr(spn)
+      print*,'spt'
+      call quantum_print_csr(spt)
+      call exitt()
       call quantum_combine_op_csr(sp,spt,1,sp_spt)
       call quantum_combine_op_csr(qd1t,sp,1,qd1t_sp)
 

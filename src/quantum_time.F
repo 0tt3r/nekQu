@@ -33,16 +33,16 @@ c$$$      call rzero( k_rho_i,nstate2)
 c$$$      call rzero(resrho_r,nstate2)
 c$$$      call rzero(resrho_i,nstate2)
 
-c$$$      do jj=1,nstate/8
-c$$$         do ii=1,nstate/8
-c$$$            rho_r(ii,jj) = 1
-c$$$            if(ii.gt.jj) then
-c$$$               rho_i(ii,jj) = -1
-c$$$            else if(ii.eq.jj) then
-c$$$               rho_i(ii,jj) = 0
-c$$$            else
-c$$$               rho_i(ii,jj) = 1
-c$$$            endif
+c$$$      do jj=1,nstate
+c$$$         do ii=1,nstate
+c$$$            rho_r(ii,jj) = 1./nstate
+c$$$c$$$            if(ii.gt.jj) then
+c$$$c$$$               rho_i(ii,jj) = -1/nstate
+c$$$c$$$            else if(ii.eq.jj) then
+c$$$c$$$               rho_i(ii,jj) = 0
+c$$$c$$$            else
+c$$$c$$$               rho_i(ii,jj) = 1/nstate
+c$$$c$$$            endif
 c$$$         enddo
 c$$$      enddo
 c!$acc parallel
@@ -51,18 +51,21 @@ c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
 
-!      if(nid.eq.0) rho_r(15,15) = 1
+!      if(nid.eq.0) rho_r(3,3) = 1
 !FIXME: Move density matrix initialization to user routine!
+      if(levels(2).eq.2) then
       do ii=1,nstate_np
-c$$$         if(ii+c_offset.eq.5+6*8) then
+!         if(ii+c_offset.eq.16+6*32) then
+!            rho_r(ii+c_offset,ii) = 1.0!/3.0
+!            rho_r(ii+c_offset,ii) = 1.0
+!         endif
+         if(ii+c_offset.eq.4) then
+            rho_r(ii+c_offset,ii) = 1.0
+         endif
+c$$$         if(ii+c_offset.eq.3) then
 c$$$            rho_r(ii+c_offset,ii) = 1.0!/3.0
 c$$$!            rho_r(ii+c_offset,ii) = 1.0
 c$$$         endif
-
-         if(ii+c_offset.eq.5) then
-            rho_r(ii+c_offset,ii) = 1.0!/3.0
-!            rho_r(ii+c_offset,ii) = 1.0
-         endif
 c$$$         if(ii+c_offset.eq.16) then
 c$$$            rho_r(ii+c_offset,ii) = 1.0!/3.0
 c$$$!            rho_r(ii+c_offset,ii) = 1.0
@@ -75,9 +78,35 @@ c$$$         if(ii+c_offset.eq.12+2*16) then
 c$$$            rho_r(ii+c_offset,ii) = 1.0/3.0
 c$$$         endif
       enddo
-!      rho_r(nstate,nstate) = 1.0
+      endif
 !$acc end parallel
 
+!Initial guesss for 7state model
+      if(levels(2).eq.7) then
+      do ii=1,nstate_np
+         if(ii+c_offset.eq.8+0*levels(1)) then
+            rho_r(ii+c_offset,ii) = 2.68506263e-02
+         endif
+         if(ii+c_offset.eq.8+1*levels(1)) then
+            rho_r(ii+c_offset,ii) = 4.77526837e-02
+         endif
+         if(ii+c_offset.eq.8+2*levels(1)) then
+            rho_r(ii+c_offset,ii) = 4.5296189e-02
+         endif
+         if(ii+c_offset.eq.8+3*levels(1)) then
+            rho_r(ii+c_offset,ii) = 2.41502947e-02
+         endif
+         if(ii+c_offset.eq.8+4*levels(1)) then
+            rho_r(ii+c_offset,ii) = 8.22440709e-02
+         endif
+         if(ii+c_offset.eq.8+5*levels(1)) then
+            rho_r(ii+c_offset,ii) = 4.04902601e-02
+         endif
+         if(ii+c_offset.eq.8+6*levels(1)) then
+            rho_r(ii+c_offset,ii) = 0.73321738 - .000001504700000
+         endif
+      enddo
+      endif
 
 !      if(nid.eq.0) rho_r(2,2) = 1.0
 !$acc update device(rho_r)
@@ -493,6 +522,7 @@ c-----------------------------------------------------------------------
       implicit none
       include 'SIZE'
       include 'QUANT' 
+      include 'mpif.h'
       integer  n2,i,j,j0
       real*8     w(n2),v(n2)
 
@@ -503,7 +533,6 @@ c-----------------------------------------------------------------------
             rho_i(i,j) = v(1*nstate2+j0)
          enddo
       enddo
-
 
       call cem_quantum3_hamiltonian
       call quantum_lin_mxm
@@ -563,6 +592,8 @@ c     Write file headers
             endif
          endif
       endif
+
+      steady_state = .false.
 
       call cem_quantum3_initialize      
       call cem_quantum3_gs
@@ -638,8 +669,8 @@ c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
           do jj=1,nstate_np
              do ii=1,nstate
                 j0 = (jj-1)*nstate+ii
-                rho_vec(0*nstate2+j0) = rho_r(ii,jj)
-                rho_vec(1*nstate2+j0) = rho_i(ii,jj)
+                r_cg(0*nstate2+j0) = rho_r(ii,jj)
+                r_cg(1*nstate2+j0) = rho_i(ii,jj)
              enddo
           enddo
 
@@ -647,7 +678,7 @@ c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
           told = iqstep*dt
           tnew = (iqstep+1)*dt
           iflag=1
-          call ode(quantum3_mult_pece,neqn,rho_vec,told,tnew,
+          call ode(quantum3_mult_pece,neqn,r_cg,told,tnew,
      $         relerr,abserr,iflag,work_ode,iwork)
 
 ! Check that integration went okay
@@ -663,8 +694,8 @@ c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
           do jj=1,nstate_np
              do ii=1,nstate
                 j0 = (jj-1)*nstate+ii
-                rho_r(ii,jj) = rho_vec(0*nstate2+j0)
-                rho_i(ii,jj) = rho_vec(1*nstate2+j0)
+                rho_r(ii,jj) = r_cg(0*nstate2+j0)
+                rho_i(ii,jj) = r_cg(1*nstate2+j0)
              enddo
           enddo
           
@@ -835,6 +866,123 @@ c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
 c$$$      enddo
 
       call cem_quantum3_propagation_finalize
+
+!$acc end data
+
+      return
+      end
+
+
+! Do RK45 without initialization
+c--------------------------------------------------------------------- 
+      subroutine cem_quantum3_propagation2_rk
+c--------------------------------------------------------------------- 
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      include 'RK5'
+      integer  iEh, ii, IERR, jj,kk,ii2
+      real*8     stime0,stime1,stime2,stime3,stime4,stime5,stime6,stime7
+      real*8   dclock,old_dt
+      complex  sig,tmpc1,ci
+
+      ci=(0.0,1.0)
+      stime0= 0.0          
+      stime1= 0.0          
+      stime2= 0.0          
+      stime3= 0.0          
+      stime4= 0.0      
+      stime5= 0.0      
+      stime6= 0.0      
+      stime7= 0.0      
+      stime0= dclock()     
+      stime1= dclock()
+
+ccc Setup acc stuff
+
+!$acc data copyin(hamilt_I_m_p,hamilt_0_m_p,hamilt_m_p)
+!$acc&     copyin(ham_a,ham_ia,ham_ja,ham_0_m_p_a,ham_m_p_a)
+!$acc&     pcreate(rho_i,rho_r,rho,drho,resrho_r,resrho_i)
+!$acc&     copyin(isstate,iqstate_m,state_sums,nq_minimal)
+!$acc&     pcreate(tmp_r1,tmp_i1,tmp_c1,k_rho_r,k_rho_i)
+!$acc&     copyin(rk4a,rk4b,rk4c)
+ccc parameters for the GPU to use - scalars automatically imported
+c!$acc&     copyin(numqd,numsp,nstate,n_in_row,nEh,nqstep,timemax)
+c!$acc&     copyin(Emin,Emax,dEh,relerr,abserr)
+c!$acc&     copyin(omega_s,gamma_s,s_mu)
+!$acc&     copyin(omega_q_m,gamma_q_m,gamma_d_m,q_mu_m,g_couple_m)
+c!$acc&     copyin(pulse_omega_0,pulse_t_0,pulse_duration,energy0_pls)
+c!$acc&     copyin(nstate_p,c_offset,dt,nid,ltonq,IFSMALLMEMORY)
+
+
+       iqstep=1
+       iiqstep = 1
+!       old_dt = dt
+
+       do while(time.lt.timemax)
+          stime1= dclock()
+         do ii= 1,5
+            stime7 = dclock()
+
+
+            call cem_quantum3_hamiltonian()
+            stime4 = stime4 + dclock()-stime7
+            stime7 = dclock()
+
+
+
+            call quantum_lin_mxm()
+!            call quantum_lin_mpi_get()
+
+
+            stime5 = stime5 + dclock()-stime7
+            stime7 = dclock()
+            call rk_quantum3_ab(ii)
+            qrtime4 = qrtime4 + dclock() - stime7
+         enddo
+c         if(abs(time-pulse_t_0).lt.3*pulse_duration) then
+c             dt=dt_small
+c         else
+c             dt=dt_large
+c         endif
+c$$$         if(time.gt.timemax/2) then
+c$$$            dt = old_dt
+c$$$         endif
+         time= time+dt
+         stime7= dclock()
+         if(useGates.eqv..true.) then
+            call quantum_apply_gates()
+         endif
+         call cem_quantum3_observables
+         if(time.gt.timeOld) then
+            call cem_quantum3_pop()
+            timeOld = timeOld+printdt
+            iiqstep = iiqstep + 1
+            stime7= dclock()-stime7
+         endif
+         stime1= dclock()-stime1
+         qrtime1= qrtime1+stime1
+         qrtime2= stime4
+         qrtime3= stime5
+!         qrtime4= stime7
+         call userchk
+!         if(windowing) call quantum_update_window()
+         iqstep=iqstep+1
+c$$$         if(iqstep.gt.100) then
+c$$$            stime0 = dclock()-stime0
+c$$$            if(nid.eq.0) write(6,*)'stime0:',stime0 
+c$$$            call exitt()
+c$$$         endif
+      enddo
+
+      stime0 = dclock()-stime0
+      if(nid.eq.0) write(6,*)'stime0:',stime0 
+
+c$$$      print*,"Rho_r final"
+c$$$      do ii=1,nstate
+c$$$         write(6,'(100g15.5)') (rho_r(ii,jj), jj=1,nstate)
+c$$$      enddo
+
 
 !$acc end data
 
@@ -1421,6 +1569,7 @@ c!$omp end parallel do
       end
 
 
+!This subroutine and quantum3_mult should be folded together
 c-----------------------------------------------------------------------
       subroutine quantum3_mult_pece(t,y,yp)
 c-----------------------------------------------------------------------
@@ -1428,7 +1577,7 @@ c-----------------------------------------------------------------------
       include 'SIZE'
       include 'QUANT' 
       integer  n2,i,j,j0
-      real*8   y(2*nstate_np*nstate),yp(2*nstate_np*nstate),t
+      real*8   y(nstate2_2),yp(nstate2_2),t
 
       do j=1,nstate_np
          do i=1,nstate
@@ -1625,7 +1774,7 @@ c     Find populations
                do jj=1,nstate_np
                   curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
                   currentPop = real(tmp_c1(jj+c_offset,jj))
-                  currentPop = real(rho_r(jj+c_offset,jj))
+!                  currentPop = real(rho_r(jj+c_offset,jj))
                   if(curState.eq.kk-1) then
 !     print*,curState,currentPop
                      pop = pop + currentPop
@@ -1663,8 +1812,13 @@ c     Find populations
          if(nid.eq.0) then
             call MPI_REDUCE(MPI_IN_PLACE,tmprv,
      $           ll,MPI_REAL8,MPI_SUM,0,MPI_COMM_WORLD,IERR)
-            write(12,12)time*timeunit,(tmprv(ii),ii=1,ll)
-            call flush(12)
+            if(steady_state.eqv..true.) then
+               write(6,*) "Steady state populations: "
+               write(6,12) (tmprv(ii),ii=1,ll)
+            else
+               write(12,12)time*timeunit,(tmprv(ii),ii=1,ll)
+               call flush(12)
+            endif
  12         format(1p20g20.8)
          else
             call MPI_REDUCE(tmprv,tmprv,
@@ -1703,8 +1857,8 @@ c     global check
       if(nid.eq.0.and.abs(currentPop-1).gt.1e-10) then 
          print*,'GLOBAL TRACE DIFFERENT THAN ONE'
          print*,'TRACE',currentPop
-         stop
-         call exitt()
+c$$$         stop
+c$$$         call exitt()
       endif
 c     Reduce results
 c$$$#ifdef MPI
@@ -2159,7 +2313,225 @@ c     $               +rho_8by8(jj,kk+twotoiq)
       return
       end
 
+      !Use CG to solve for the steady state
+c=======================================================================
+      subroutine cem_quantum3_steadystate_gmres()
+c=======================================================================      
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+#ifdef MPI
+      include 'mpif.h'
+#endif
 
+      real*8 alpha,rtr1,rtr2,beta,pAp,tol,multiplier
+      integer iter,niter,ii,jj,j0,ierr
+C          Test example
+c$$$      integer n
+c$$$      parameter (n=4)
+c$$$      real*8 a(n,n),b(n)
+c$$$      data (a(1,ii),ii=1,n) /420.,210.,140.,105./
+c$$$      data (a(2,ii),ii=1,n) /210.,140.,105.,84./
+c$$$      data (a(3,ii),ii=1,n) /140.,105.,84.,70./
+c$$$      data (a(4,ii),ii=1,n) /105.,84.,70.,60./
+c$$$      data (b(ii),ii=1,n) /875.,539.,399.,319./
+c$$$      nqstep_print = 990
+c$$$      call cem_quantum3_propagation_init    
+c$$$      call cem_quantum3_rk_storage
+
+      !do a quick thermalization
+      
+      print_during_run = .true. !This makes it print in quantum_pop
+c$$$      call cem_quantum3_pop
+c$$$      call quantum_gmres !Get steady state using gmres
+c$$$      call cem_quantum3_pop
+c$$$      
+      timemax = 0.01e-6/timeunit
+      nqstep  = 5000
+
+      dt = timemax/(nqstep)
+!      call cem_quantum3_propagation2_rk
+c$$$      steady_state = .true.
+c$$$      call cem_quantum3_pop
+c$$$      call quantum_gmres !Get steady state using gmres
+c$$$      call cem_quantum3_pop
+c$$$      steady_state = .false.
+c$$$      timemax = 0.2e-6/timeunit
+c$$$
+c$$$      dt = (timemax-time)/(nqstep)
+c$$$      call cem_quantum3_propagation2_rk
+c$$$      steady_state = .true.
+c$$$      call cem_quantum3_pop
+c$$$      call quantum_gmres !Get steady state using gmres
+c$$$      call cem_quantum3_pop
+c$$$      steady_state = .false.
+c$$$      timemax = 0.06e-6/timeunit
+c$$$      dt = (timemax-time)/(nqstep)
+c$$$      call cem_quantum3_propagation2_rk
+c$$$      steady_state = .true.
+c$$$      call cem_quantum3_pop
+c$$$      call quantum_gmres !Get steady state using gmres
+c$$$      call cem_quantum3_pop
+
+      call cem_quantum3_initialize
+      call cem_quantum3_gs
+     
+      steady_state = .true.
+      call cem_quantum3_pop
+      call quantum_gmres !Get steady state using gmres
+      call cem_quantum3_pop
+
+      end
+
+
+      !Use CG to solve for the steady state - won't work with Lindblad
+c=======================================================================
+      subroutine cem_quantum3_steadystate_cg()
+c=======================================================================      
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+#ifdef MPI
+      include 'mpif.h'
+#endif
+
+      real*8 alpha,rtr1,rtr2,beta,pAp,tol
+      integer iter,niter,ii,jj,j0,ierr
+C          Test example
+c$$$      integer n
+c$$$      parameter (n=4)
+c$$$      real*8 a(n,n),b(n)
+c$$$      data (a(1,ii),ii=1,n) /420.,210.,140.,105./
+c$$$      data (a(2,ii),ii=1,n) /210.,140.,105.,84./
+c$$$      data (a(3,ii),ii=1,n) /140.,105.,84.,70./
+c$$$      data (a(4,ii),ii=1,n) /105.,84.,70.,60./
+c$$$      data (b(ii),ii=1,n) /875.,539.,399.,319./
+
+      niter = 100 !move to user controlled with default
+      tol   = 1.0e-13 !move to user controlled with default
+      steady_state = .true.
+      print_during_run = .true. !This makes it print in quantum_pop
+      call cem_quantum3_initialize      
+      call cem_quantum3_gs
+      
+
+      do jj=1,nstate_np
+         do ii=1,nstate
+            j0 = (jj-1)*nstate+ii
+            p_cg(0*nstate2+j0) = rho_r(ii,jj)
+            p_cg(1*nstate2+j0) = rho_i(ii,jj)
+         enddo
+      enddo
+
+      !Calculate -i * [H,p] - L(p) ==> A*x
+      !r = b - A*x, but b=0 for steady state, so r=-A*x = -r_cg
+      call quantum3_mult(r_cg,p_cg,nstate2_2)      
+      do ii=1,nstate2_2
+         r_cg(ii) = -r_cg(ii)
+      enddo
+
+
+!      call residual(n,a,x_cg,b,r_cg)
+!      write(6,*) (r_cg(ii),ii=1,n)
+      do ii=1,nstate2_2
+         p_cg(ii) = 0.0
+      enddo
+
+      rtr1 = 1.0
+      do iter=1,niter
+         rtr2 = rtr1
+         !rtr1 = r_k^T r_k
+         rtr1 = 0
+         do ii=1,nstate2_2
+            rtr1 = rtr1 + r_cg(ii)*r_cg(ii)
+         enddo
+
+         call MPI_ALLREDUCE(MPI_IN_PLACE,rtr1,1,MPI_REAL8,MPI_SUM,
+     $        MPI_COMM_WORLD,IERR)
+
+
+         print*,'sqrt(rtr1) ',sqrt(rtr1)
+         if(sqrt(rtr1).le.tol) then
+            go to 1000 !EXIT loop
+         endif
+
+         !beta = r_k+1^T r_k+1 / r_k^T r_k
+         beta = rtr1/rtr2
+         !if(iter.eq.1) beta = 0.0 !Since initial p is 0, this is not necessary
+         
+         do ii=1,nstate2_2
+            p_cg(ii) = r_cg(ii) + beta*p_cg(ii)
+          enddo
+
+         !Calculate Ap
+         call quantum3_mult(Ap_cg,p_cg,nstate2_2)
+
+!          call mult(n,a,p_cg,Ap_cg)
+
+         pAp = 0
+         do ii=1,nstate2_2
+            pAp = pAp + p_cg(ii) * Ap_cg(ii)
+         enddo
+
+         call MPI_ALLREDUCE(MPI_IN_PLACE,pAp,1,MPI_REAL8,MPI_SUM,
+     $        MPI_COMM_WORLD,IERR)
+         
+         !alpha = r_k^T r_k/p_k^T A p_k
+         alpha = rtr1/pAp
+         !r_k+1 = r_k - alpha_k*Ap_k
+         !x_k = x_k + alpha_k*p_k
+         do ii=1,nstate2_2
+            r_cg(ii) = r_cg(ii) - alpha*Ap_cg(ii)
+            x_cg(ii) = x_cg(ii) + alpha*p_cg(ii)
+         enddo
+      enddo
+ 1000 continue
+
+      !Get the final, steady state populations
+      do jj=1,nstate_np
+         do ii=1,nstate
+            j0 = (jj-1)*nstate+ii
+            rho_r(ii,jj) = x_cg(0*nstate2+j0)
+            rho_i(ii,jj) = x_cg(1*nstate2+j0)
+         enddo
+      enddo
+      call cem_quantum3_pop
+
+      end
+c===========================================================================
+
+c$$$      subroutine residual(n,a,x,b,r)
+c$$$c
+c$$$c     compute the residual r = b-Ax
+c$$$c
+c$$$      dimension a(n,n),x(n),b(n),r(n)
+c$$$      call mult(n,a,x,r)
+c$$$c
+c$$$      do 2 i=1,n
+c$$$         r(i) = b(i) - r(i)
+c$$$ 2           continue
+c$$$c
+c$$$      return
+c$$$      end
+c$$$
+c$$$      subroutine mult(n,a,x,y)
+c$$$c
+c$$$c     compute the matrix-vector product
+c$$$c
+c$$$      dimension a(n,n),x(n),y(n)
+c$$$c
+c$$$      do 3 i=1,n
+c$$$         sum = 0.0
+c$$$         do 2 j=1,n
+c$$$            sum = sum + a(i,j)*x(j)
+c$$$ 2                 continue
+c$$$         y(i) = sum
+c$$$ 3           continue
+c$$$c
+c$$$      return
+c$$$      end
+
+c=======================================================================
       subroutine ode(f,neqn,y,t,tout,relerr,abserr,iflag,work,iwork)
       implicit real*8(a-h,o-z)
 c Shampine's differential equations integrator

@@ -169,6 +169,57 @@ c     row i
       return
       end
 
+
+      subroutine quantum_csr_getdia (nrow,ncol,a,ja,ia,diag)
+
+c*********************************************************************72
+c
+cc GETDIA extracts a given diagonal from a matrix stored in CSR format.
+c on entry:
+c
+c
+c nrow      = integer. The row dimension of the matrix A.
+c ncol      = integer. The column dimension of the matrix A.
+c a,ja,
+c    ia = matrix stored in compressed sparse row a,ja,ia,format
+c on return:
+c
+c len   = number of nonzero elements found in diag.
+c         (len .le. min(nrow,ncol-ioff)-max(1,1-ioff) + 1 )
+c
+c diag  = double precision array of length nrow containing the wanted diagonal.
+c        diag contains the diagonal (a(i,j),j-i = ioff ) as defined
+c         above.
+c
+c           Y. Saad, Sep. 21 1989 - modified and tested May 9, 1990.
+c
+      implicit double precision (a-h,o-z)
+      double precision diag(*),a(*)
+      integer nrow, ncol, job, ia(*), ja(*)
+      integer istart, max, iend, i, k
+
+      istart = max(0,-ioff)
+      iend = min0(nrow,ncol-ioff)
+
+      do i=1,nrow
+         diag(i) = 0.0
+      enddo
+c
+c     extract  diagonal elements
+c
+      do i=istart+1, iend
+         do k= ia(i),ia(i+1) -1
+            if (ja(k)-i .eq. ioff) then
+               diag(i)= a(k)
+               exit
+            end if
+         enddo
+      enddo
+
+
+      return
+      end
+
 c*********************************************************************72
 c
 cc quantum_add_csr performs the CSR matrix sum C = A + B.
@@ -231,7 +282,8 @@ c     row i
             len = len+1
             jcol    = ja(ka)
             if (len .gt. nzmax) then
-               print*,'ERROR in ADD CSR'
+               print*,'len ',len,' nzmax ',nzmax
+               print*,'ERROR in ADD CSR - LEN GT NZMAX'
                stop
             endif
             jd(len) = jcol
@@ -248,7 +300,7 @@ c     row i
             if (jpos .eq. 0) then
                len = len+1
                if (len .gt.nzmax) then
-                  print*,'ERROR in ADD CSR'
+                  print*,'ERROR in ADD CSR - LEN GT NZMAX2'
                   stop
                endif
                jd(len) = jcol
@@ -316,7 +368,7 @@ c     row i
             len = len+1
             jcol    = ja(ka)
             if (len .gt. nzmax) then
-               print*,'ERROR in ADD CSR'
+               print*,'ERROR in ADD CSR_HAM - LEN GT NZMAX'
                stop
             endif
             jd(len) = jcol
@@ -331,7 +383,7 @@ c     row i
             if (jpos .eq. 0) then
                len = len+1
                if (len .gt.nzmax) then
-                  print*,'ERROR in ADD CSR'
+                  print*,'ERROR in ADD CSR_HAM2 - LEN GT NZMAX2'
                   stop
                endif
                jd(len) = jcol

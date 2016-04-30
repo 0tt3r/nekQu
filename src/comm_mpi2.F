@@ -60,7 +60,7 @@ c     if (nid.eq.0) write(6,10) MPI_THREAD_MULTIPLE,provided
 
       if (nval.lt.(10000+max(lp,lelg))) then
          if(nid.eq.0) write(6,*) 'ABORT: MPI_TAG_UB too small!'
-         call exitt
+!         call exitt
       endif
 
       IF (NP.GT.LP) THEN
@@ -199,7 +199,7 @@ c        call mpi_allreduce_(x,w,n,nekreal,mpi_prod,nekcomm,ierr)
          call exitt
       endif
 c
-      !call copy(x,w,n)
+      call copy(x,w,n)
 c
       tgop =tgop +(dclock()-etime1)
 c

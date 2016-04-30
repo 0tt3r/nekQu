@@ -285,7 +285,8 @@
 
       nstate    = quantN
       nstate_p  = nstate*nstate/np
-      nstate2   = nstate*nstate
+      nstate2   = nstate*nstate/np
+      nstate2_2   = 2*nstate*nstate/np
       nstate_np = nstate/np
       c_offset  = nid*nstate/np
       
@@ -427,7 +428,7 @@ c$$$      enddo
 
       integer op,handle1,handle2,handle3,ii,jj,nzmax
 
-      nzmax   = maxN*10
+      nzmax   = maxN*maxN/lp
       handle3 = newHandleNumber
       if(newHandleNumber.gt.maxOp) then
          if(nid.eq.0) then
@@ -660,7 +661,7 @@ c$$$       enddo
       include 'QUANT'
       integer ii,jj,kk,IERR,nzmax
 
-      ham_nnz = nstate2
+      ham_nnz = maxN*maxN/lp
       !Add together independent and dependent parts to get indices
       !0 means do the add such that ham_i and ham_d are promoted to
       !csr, padded with 0s
