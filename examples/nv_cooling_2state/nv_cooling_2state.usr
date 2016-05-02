@@ -28,12 +28,12 @@ c-----------------------------------------------------------------------
 !      integer a,at,an,a_at,a_p_at
 !      integer sig_g1,sig_g2,sig_e1,sig_e2
       
-      
+      integer jc(1200),ic(1200),nnz_c,ii
       integer N_th,num_phon,min_phonon_num !number of phonons
       !parameters
       real w_m,D_e,Omega,gamma_eff,lambda_eff,lambda_s
       real keg,Q,prefactor,alpha,gamma_par,eV
-
+      real c(1200)
       !Units
       real kHz,MHz,GHz,THz,Hz,ns,us
       !Read the simple input
@@ -68,7 +68,7 @@ c$$$      nqstep      = 18000
       timemax     = 1.e-6/timeunit
       nqstep      = 100000
       nqstep_print = 100000
-      num_phon = 16
+      num_phon = 4
 
       print_during_run = .true.
 !     Create basic operators
@@ -100,6 +100,7 @@ c$$$      nqstep      = 18000
 
       call quantum_finalize_op_csr()
 
+      call quantum_print_csr(nv)
 
       call quantum_combine_op_csr(a,at,1,a_at)
       call quantum_combine_op_csr(nv,nvt,1,nv_nvt)
@@ -119,6 +120,9 @@ c$$$      nqstep      = 18000
 
 
       call quantum_ham_finalize_csr()
+      call quantum_print_ham()
+      call quantum_kron_ham()
+
 
       !Lindblad terms
       !L_{i,f} = -2*|f><i|rho|i><f| + |i><i|rho + rho|i><i|
@@ -147,8 +151,8 @@ c$$$
 c$$$!      print*,'after lin_add2'
 c$$$
       call quantum_lin_finalize()
-
-
+      call quantum_kron_lin()
+      call exitt()
 !      call make_hamiltonian_and_lin(min_phonon_num)
 
 !      call cem_quantum3_propagation_exp
@@ -194,7 +198,7 @@ c-----------------------------------------------------------------------
       gamma_par = 167*MHz
       keg = 100*MHz !Relaxation from excited to ground
       Q   = 10**6  !Mechanical resonator quality factor
-      Q   = 10**12! Q factor artifical - 3 phonons
+      Q   = 10**6! Q factor artifical - 3 phonons
 
       N_th = 13200 ! Room temperature
       N_th = 100   !Very cold

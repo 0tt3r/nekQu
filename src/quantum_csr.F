@@ -5,6 +5,322 @@ c I don't know the licensing information
 c and Mills Vectorized sparse mxm for csr
 c-------------------------------------------
 
+
+
+c*********************************************************************72
+      subroutine aplb1(nrow,ncol,job,a,ja,ia,b,jb,ib,c,jc,ic,nzmax,ierr)
+
+c*********************************************************************72
+c
+cc APLB1 performs the sum C = A + B for sorted CSR matrices.
+c
+c the difference with aplb  is that the resulting matrix is such that
+c the elements of each row are sorted with increasing column indices in
+c each row, provided the original matrices are sorted in the same way.
+c
+c on entry:
+c
+c nrow      = integer. The row dimension of A and B
+c ncol  = integer. The column dimension of A and B.
+c job   = integer. Job indicator. When job = 0, only the structure
+c                  (i.e. the arrays jc, ic) is computed and the
+c                  real values are ignored.
+c
+c a,
+c ja,
+c ia   = Matrix A in compressed sparse row format with entries sorted
+c
+c b,
+c jb,
+c ib      =  Matrix B in compressed sparse row format with entries sorted
+c        ascendly in each row
+c
+c nzmax      = integer. The  length of the arrays c and jc.
+c         amub will stop if the result matrix C  has a number
+c         of elements that exceeds exceeds nzmax. See ierr.
+c
+c on return:
+c
+c c,
+c jc,
+c ic      = resulting matrix C in compressed sparse row sparse format
+c         with entries sorted ascendly in each row.
+c
+c ierr      = integer. serving as error message.
+c         ierr = 0 means normal return,
+c         ierr .gt. 0 means that amub stopped while computing the
+c         i-th row  of C with i=ierr, because the number
+c         of elements in C exceeds nzmax.
+c
+c Notes:
+c
+c     this will not work if any of the two input matrices is not sorted
+c
+      double precision a(*), b(*), c(*)
+      integer ja(*),jb(*),jc(*),ia(nrow+1),ib(nrow+1),ic(nrow+1)
+      logical values
+
+      values = (job .ne. 0)
+      ierr = 0
+      kc = 1
+      ic(1) = kc
+
+      do 6 i=1, nrow
+         ka = ia(i)
+         kb = ib(i)
+         kamax = ia(i+1)-1
+         kbmax = ib(i+1)-1
+ 5       continue
+         if (ka .le. kamax) then
+            j1 = ja(ka)
+         else
+            j1 = ncol+1
+         end if
+         if (kb .le. kbmax) then
+            j2 = jb(kb)
+         else
+            j2 = ncol+1
+         end if
+c
+c     three cases
+c
+         if (j1 .eq. j2) then
+            if (values) c(kc) = a(ka)+b(kb)
+            jc(kc) = j1
+            ka = ka+1
+            kb = kb+1
+            kc = kc+1
+         else if (j1 .lt. j2) then
+            jc(kc) = j1
+            if (values) c(kc) = a(ka)
+            ka = ka+1
+            kc = kc+1
+         else if (j1 .gt. j2) then
+            jc(kc) = j2
+            if (values) c(kc) = b(kb)
+            kb = kb+1
+            kc = kc+1
+         end if
+         if (kc .gt. nzmax) goto 999
+         if (ka .le. kamax .or. kb .le. kbmax) goto 5
+         ic(i+1) = kc
+ 6    continue
+      return
+ 999  ierr = i
+      return
+      end
+       
+      
+c*********************************************************************72
+      subroutine aplb (nrow,ncol,job,a,ja,ia,b,jb,ib,
+     $     c,jc,ic,nzmax,iw,ierr)
+
+c*********************************************************************72
+c
+cc APLB performs the CSR matrix sum C = A + B.
+c
+c on entry:
+c
+c nrow      = integer. The row dimension of A and B
+c ncol  = integer. The column dimension of A and B.
+c job   = integer. Job indicator. When job = 0, only the structure
+c                  (i.e. the arrays jc, ic) is computed and the
+c                  real values are ignored.
+c
+c a,
+c ja,
+c ia   = Matrix A in compressed sparse row format.
+c
+c b,
+c jb,
+c ib      =  Matrix B in compressed sparse row format.
+c
+c nzmax      = integer. The  length of the arrays c and jc.
+c         amub will stop if the result matrix C  has a number
+c         of elements that exceeds exceeds nzmax. See ierr.
+c
+c on return:
+c
+c c,
+c jc,
+c ic      = resulting matrix C in compressed sparse row sparse format.
+c
+c ierr      = integer. serving as error message.
+c         ierr = 0 means normal return,
+c         ierr .gt. 0 means that amub stopped while computing the
+c         i-th row  of C with i=ierr, because the number
+c         of elements in C exceeds nzmax.
+c
+c work arrays:
+c
+c iw      = integer work array of length equal to the number of
+c   columns in A.
+c
+      double precision a(*), b(*), c(*)
+      integer ja(*),jb(*),jc(*),ia(nrow+1),ib(nrow+1),ic(nrow+1),
+     $     iw(ncol)
+      logical values
+
+      values = (job .ne. 0)
+      ierr = 0
+      len = 0
+      ic(1) = 1
+      do 1 j=1, ncol
+         iw(j) = 0
+ 1    continue
+
+      do 500 ii=1, nrow
+c     row i
+         do 200 ka=ia(ii), ia(ii+1)-1
+            len = len+1
+            jcol    = ja(ka)
+            if (len .gt. nzmax) goto 999
+            jc(len) = jcol
+            if (values) c(len)  = a(ka)
+            iw(jcol)= len
+ 200     continue
+
+         do 300 kb=ib(ii),ib(ii+1)-1
+            jcol = jb(kb)
+            jpos = iw(jcol)
+            if (jpos .eq. 0) then
+               len = len+1
+               if (len .gt. nzmax) goto 999
+               jc(len) = jcol
+               if (values) c(len)  = b(kb)
+               iw(jcol)= len
+            else
+               if (values) c(jpos) = c(jpos) + b(kb)
+            end if
+ 300     continue
+         do 301 k=ic(ii), len
+            iw(jc(k)) = 0
+ 301     continue
+         ic(ii+1) = len+1
+ 500  continue
+      return
+ 999  ierr = ii
+      return
+      end
+       
+
+c*********************************************************************72
+      subroutine coicsr (n,nnz,job,a,ja,ia,iwk)
+
+c*********************************************************************72
+c
+cc COICSR converts COO to CSR in place.
+c
+c IN-PLACE coo-csr conversion routine.
+c
+c COICSR converts a matrix stored in coordinate format into
+c the csr format. The conversion is done in place in that the arrays
+c a,ja,ia of the result are overwritten onto the original arrays.
+c
+c on entry:
+c
+c n      = integer. row dimension of A.
+c nnz      = integer. number of nonzero elements in A.
+c job   = integer. Job indicator. when job=1, the real values in a are
+c         filled. Otherwise a is not touched and the structure of the
+c         array only (i.e. ja, ia)  is obtained.
+c a      = double precision array of size nnz (number of nonzero elements in A)
+c         containing the nonzero elements
+c ja      = integer array of length nnz containing the column positions
+c         of the corresponding elements in a.
+c ia      = integer array of length nnz containing the row positions
+c         of the corresponding elements in a.
+c iwk      = integer work array of length n.
+c on return:
+c
+c a
+c ja
+c ia      = contains the compressed sparse row data structure for the
+c         resulting matrix.
+c Note:
+c
+c         the entries of the output matrix are not sorted (the column
+c         indices in each are not in increasing order) use coocsr
+c         if you want them sorted.
+c
+c  Coded by Y. Saad, Sep. 26 1989
+c
+      integer ia(nnz),ja(nnz),iwk(n)
+      double precision a(*)
+      double precision t,tnext
+      logical values
+
+      values = (job .eq. 1)
+c
+c find pointer array for resulting matrix.
+c
+      do 35 i=1,n+1
+         iwk(i) = 0
+ 35   continue
+      do 4 k=1,nnz
+         i = ia(k)
+         iwk(i+1) = iwk(i+1)+1
+ 4    continue
+
+      iwk(1) = 1
+      do 44 i=2,n
+         iwk(i) = iwk(i-1) + iwk(i)
+ 44   continue
+c
+c  loop for a cycle in chasing process.
+c
+      init = 1
+      k = 0
+ 5    if (values) t = a(init)
+      i = ia(init)
+      j = ja(init)
+      ia(init) = -1
+
+ 6    k = k+1
+c
+c  current row number is i.  determine  where to go.
+c
+      ipos = iwk(i)
+c
+c  save the chased element.
+c
+      if (values) tnext = a(ipos)
+      inext = ia(ipos)
+      jnext = ja(ipos)
+c
+c  then occupy its location.
+c
+      if (values) a(ipos)  = t
+      ja(ipos) = j
+c
+c  update pointer information for next element to come in row i.
+c
+      iwk(i) = ipos+1
+c
+c  determine  next element to be chased,
+c
+      if (ia(ipos) .lt. 0) goto 65
+      t = tnext
+      i = inext
+      j = jnext
+      ia(ipos) = -1
+      if (k .lt. nnz) goto 6
+      goto 70
+ 65   init = init+1
+      if (init .gt. nnz) goto 70
+      if (ia(init) .lt. 0) goto 65
+c
+c  restart chasing.
+c
+      goto 5
+ 70   do 80 i=1,n
+         ia(i+1) = iwk(i)
+ 80   continue
+      ia(1) = 1
+      return
+      end
+
+c*********************************************************************72
       subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
 
 c*********************************************************************72
@@ -154,6 +470,7 @@ c     row i
                      jc(len) = jcol
                      iw(jcol)= len
                      if (values) c(len)  = scal*b(kb)
+
                   else
                      if (values) c(jpos) = c(jpos) + scal*b(kb)
                   end if
@@ -169,7 +486,274 @@ c     row i
       return
       end
 
+!************************************************************
+!     Wrapper for general tensor product, using handles of operators
+!************************************************************
 
+      subroutine quantum_kron(handle1,handle2,c,jc,ic)
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer handle1,handle2,nnz_c
+      integer jc(*),ic(*)
+      real    c(*)
+      call quantum_csr_kron(op_csr_a(1,handle1),op_csr_ja(1,handle1),
+     $     op_csr_ia(1,handle1),nstate,nstate,op_csr_a(1,handle2),
+     $     op_csr_ja(1,handle2),op_csr_ia(1,handle2),nstate,nstate,
+     $     c,jc,ic,nnz_c)
+
+
+      end
+
+!************************************************************
+!     Calculate I cross H - H cross I
+!************************************************************
+
+      subroutine quantum_kron_ham()
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer ja(nstate2*nstate),ia(nstate2*nstate),nnz_a
+      real a(nstate2*nstate)
+      integer jb(nstate2*nstate),ib(nstate2*nstate),nnz_b
+      real b(nstate2*nstate)
+      integer jc(nstate2*nstate),ic(nstate2*nstate),nnz_c
+      real c(nstate2*nstate)
+      integer i_eye(nstate+1),j_eye(nstate),iw(nstate2)
+      real eye(nstate),op(nstate2,nstate2)
+      integer ii,jj,ierr,kk
+!     Construct identity matrix in csr format
+      do ii=1,nstate
+         eye(ii) = 1.0
+         i_eye(ii) = ii
+         j_eye(ii) = ii
+      enddo
+      i_eye(nstate+1) = nstate+1
+
+      !Do a = I cross H
+      call quantum_csr_kron(eye,j_eye,i_eye,nstate,nstate,
+     $     ham_i,ham_ja,ham_ia,nstate,nstate,a,ja,ia)
+
+      !Do b = H cross I
+      call quantum_csr_kron(ham_i,ham_ja,ham_ia,nstate,nstate,
+     $     eye,j_eye,i_eye,nstate,nstate,b,jb,ib)
+
+!Make all elements in b negative, because we want I cross H - H cross I
+      do ii=1,nstate2
+         do kk=ib(ii),ib(ii+1)-1
+            b(kk) = -b(kk)
+         enddo
+      enddo
+
+
+!Add a and b
+      call aplb(nstate2,nstate2,1,a,ja,ia,b,jb,ib,c,jc,ic,
+     $     nstate2*nstate,iw,ierr)
+
+      call csrcoo(nstate2,1,nstate2*nstate,c,jc,ic,nnz_c,c,ic,jc,ierr)
+
+!     Now write the coo matrix to file
+      if(nid.eq.0) then
+         open(unit=20,file='ham_tilde')
+         do ii=1,nnz_c
+            if(c(ii).ne.0.0) then
+               write(20,'(g30.15,2i7)') c(ii),jc(ii),ic(ii)
+            endif
+         enddo
+         close(unit=20)
+      endif
+      
+      end
+
+
+!************************************************************
+!     Calculate L_tilde, the explicit n2 x n2 matrix representation
+!     of the lindblad
+!
+!     L = xt x rho + rho xt x - 2 x rho xt
+!     L_tilde = I cross xt x + xt x cross I - 2*(x cross transpose(xt))
+!             = ............. ... ..        - 2*(x cross x), since transpose(xt) = x
+!     
+!************************************************************
+
+      subroutine quantum_kron_lin()
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer ja(nstate2*nstate),ia(nstate2*nstate),nnz_a
+      real a(nstate2*nstate)
+      integer jb(nstate2*nstate),ib(nstate2*nstate),nnz_b
+      real b(nstate2*nstate)
+      integer jc(nstate2*nstate),ic(nstate2*nstate),nnz_c
+      real c(nstate2*nstate)
+      integer jL(nstate2*nstate),iL(nstate2*nstate)
+      real L(nstate2*nstate)
+      integer i_eye(nstate+1),j_eye(nstate),iw(nstate2)
+      real eye(nstate),op(nstate2,nstate2)
+      integer ii,jj,ierr,kk,iOp,handle
+!     And initialize Ltilde to zeros on the diagonal in CSR format
+!     So that we have a csr matrix to add to
+      do ii=1,nstate2
+         L(ii)     = 0.0
+         iL(ii)    = ii
+         jL(ii)    = ii
+      enddo
+      iL(nstate2+1)   = nstate2+1
+
+      do ii=1,nstate
+         eye(ii) = 1.0
+         i_eye(ii) = ii
+         j_eye(ii) = ii
+      enddo
+      i_eye(nstate+1) = nstate+1
+      
+!     During setup, we previously stored the lindblad handles as:
+!     (x)_i = lin_mxm_op(1,i)
+!     (xt x)_i = lin_mxm_op(2,i)
+
+!     Loop over lindblad operators
+      do iOp=1,numberOfLinOps
+        handle = lin_mxm_op(2,iOp)
+!     Do A = I cross at a
+         call quantum_csr_kron(eye,j_eye,i_eye,nstate,nstate,
+     $       op_csr_a(1,handle),op_csr_ja(1,handle),
+     $       op_csr_ia(1,handle),nstate,nstate,a,ja,ia)
+
+!     Do B = at a cross I
+         call quantum_csr_kron(op_csr_a(1,handle),op_csr_ja(1,handle),
+     $        op_csr_ia(1,handle),nstate,nstate,
+     $        eye,j_eye,i_eye,nstate,nstate,b,jb,ib)
+
+!     Add a and b into c
+         call aplb(nstate2,nstate2,1,a,ja,ia,b,jb,ib,c,jc,ic,
+     $        nstate2*nstate,iw,ierr)
+
+!     Add c and L_tilde, store in b (just tmp storage, sense aplb overwrites)
+         call aplb(nstate2,nstate2,1,c,jc,ic,L,jL,iL,b,jb,ib,
+     $        nstate2*nstate,iw,ierr)
+
+!     Copy b to L_tilde
+         do ii=1,nstate2
+            iL(ii) = ib(ii)
+            do kk=ib(ii),ib(ii+1)
+               jL(kk) = jb(kk)
+               L(kk)  = b(kk)
+            enddo
+         enddo
+         iL(nstate2+1) = ib(nstate2+1)
+         
+         handle = lin_mxm_op(1,iOp)
+!     Now, do x cross x
+         call quantum_csr_kron(op_csr_a(1,handle),op_csr_ja(1,handle),
+     $        op_csr_ia(1,handle),nstate,nstate,
+     $        op_csr_a(1,handle),op_csr_ja(1,handle),
+     $        op_csr_ia(1,handle),nstate,nstate,c,jc,ic)
+
+!     Multiply c = x cross x by -2
+         do ii=1,nstate2
+            do kk=ic(ii),ic(ii+1)
+               c(kk)  = -2*c(kk)
+            enddo
+         enddo
+         
+!     Add c and L_tilde 
+         call aplb(nstate2,nstate2,1,c,jc,ic,L,jL,iL,b,jb,ib,
+     $        nstate2*nstate,iw,ierr)
+        
+         print*,lin_mxm_a(iOp)
+!     Copy b to L_tilde and multiply by the scalar
+         do ii=1,nstate2
+            iL(ii) = ib(ii)
+            do kk=ib(ii),ib(ii+1)
+               jL(kk) = jb(kk)
+               L(kk)  = lin_mxm_a(iOp)*b(kk)
+               print*,'L(kk) ',L(kk)
+            enddo
+         enddo
+         iL(nstate2+1) = ib(nstate2+1)
+      enddo
+      
+      call csrdns(nstate2,nstate2,L,
+     $     jL,iL,op,nstate2,ierr)
+      do ii=1,nstate2
+         write(20,'(300g15.5)') (op(ii,jj), jj=1,nstate2)
+      enddo
+      
+
+      
+!     Convert to COO format, in place
+      call csrcoo(nstate2,1,nstate2*nstate,L,jL,iL,nnz_c,L,iL,jL,ierr)
+!     Now write the coo matrix to file
+      if(nid.eq.0) then
+         open(unit=20,file='l_tilde')
+         do ii=1,nnz_c
+            if(L(ii).ne.0.0) then
+               write(20,'(g35.15,2i9)') L(ii),jL(ii),iL(ii)
+            endif
+         enddo
+         close(unit=20)
+      endif
+      
+      end
+!************************************************************
+!     General tensor product of 2 CSR matrices
+!     C = kron(A,B)
+!     Input:
+!            a, ja, ia, nrowa, ncola - A matrix in CSR format
+!            b, jb, ib, nrowb, ncolb - B matrix in CSR format
+!     Output:
+!            c, ic, jc - C matrix in CSR format
+!            nnz_c     - nonzeros in C
+!************************************************************
+      subroutine quantum_csr_kron(a,ja,ia,nrowa,ncola,b,jb,ib,
+     $     nrowb,ncolb,c,jc,ic)
+
+      implicit none
+      integer ia(*),ja(*),ib(*),jb(*),ic(*),jc(*),iwk(nrowa*nrowb)
+      integer nrowa,ncola,nrowb,ncolb
+      real    a(*),b(*),c(*)
+      integer ii,jj,ka,ll,mm,kb,nnz_c
+      real atmp
+      
+      nnz_c = 0
+!Loop over the A matrix
+      do ii=1,nrowa
+         do ka=ia(ii),ia(ii+1)-1
+            jj = ja(ka)
+            atmp = a(ka)
+!     The i,j element of A is nonzero - multiply it by the block of B
+!     Loop over B matrix
+            do ll=1,nrowb
+               do kb=ib(ll),ib(ll+1)-1
+                  mm = jb(kb)
+!     We now take the ii,jj element of A and multiply by
+!     the ll,mm element of B (both are nonzero, by design)
+!     The location in C is:
+!                 nrowb*(ii-1)+1+(ll-1) , ncolb*(jj-1)+1+(mm-1)
+                  nnz_c = nnz_c + 1
+                  c(nnz_c) = atmp * b(kb)
+                  ic(nnz_c) = nrowb*(ii-1) + ll
+                  jc(nnz_c) = ncolb*(jj-1) +  mm
+               enddo
+            enddo
+         enddo
+      enddo
+
+!Convert to CSR matrix
+      call coicsr(nrowa*nrowb,nnz_c,1,c,jc,ic,iwk)
+
+      
+
+      end
+
+      
+
+
+
+!************************************************************
       subroutine quantum_csr_getdia (nrow,ncol,a,ja,ia,diag)
 
 c*********************************************************************72
@@ -411,6 +995,80 @@ c     row i
 
       end
 
+c*********************************************************************72
+      subroutine csrcoo (nrow,job,nzmax,a,ja,ia,nnz,ao,ir,jc,ierr)
+
+c*********************************************************************72
+c
+cc CSRCOO converts Compressed Sparse Row to Coordinate format.
+c
+c converts a matrix that is stored in coordinate format
+c  a, ir, jc into a row general sparse ao, jao, iao format.
+c
+c on entry:
+c
+c nrow      = dimension of the matrix.
+c job   = integer serving as a job indicator.
+c         if job = 1 fill in only the array ir, ignore jc, and ao.
+c         if job = 2 fill in ir, and jc but not ao
+c         if job = 3 fill in everything.
+c         The reason why these options are provided is that on return
+c         ao and jc are the same as a, ja. So when job = 3, a and ja are
+c         simply copied into ao, jc.  When job=2, only jc and ir are
+c         returned. With job=1 only the array ir is returned. Moreover,
+c         the algorithm is in place:
+c     call csrcoo (nrow,1,nzmax,a,ja,ia,nnz,a,ia,ja,ierr)
+c         will write the output matrix in coordinate format on a, ja,ia.
+c         (Important: note the order in the output arrays a, ja, ia. )
+c         i.e., ao can be the same as a, ir can be the same as ia
+c         and jc can be the same as ja.
+c
+c a,
+c ja,
+c ia    = matrix in compressed sparse row format.
+c nzmax = length of space available in ao, ir, jc.
+c         the code will stop immediatly if the number of
+c         nonzero elements found in input matrix exceeds nzmax.
+c
+c on return:
+c
+c ao, ir, jc = matrix in coordinate format.
+c
+c nnz        = number of nonzero elements in matrix.
+c ierr       = integer error indicator.
+c         ierr .eq. 0 means normal retur
+c         ierr .eq. 1 means that the the code stopped
+c         because there was no space in ao, ir, jc
+c         (according to the value of  nzmax).
+c
+      double precision a(*),ao(*)
+      integer ir(*),jc(*),ja(*),ia(*)
+
+      ierr = 0
+      nnz = ia(nrow+1)-1
+      if (nnz .gt. nzmax) then
+         ierr = 1
+         return
+      end if
+
+      goto (3,2,1) job
+ 1    do 10 k=1,nnz
+         ao(k) = a(k)
+ 10   continue
+ 2    do 11 k=1,nnz
+         jc(k) = ja(k)
+ 11   continue
+c copy backward to allow
+ 3    do 13 i=nrow,1,-1
+         k1 = ia(i+1)-1
+         k2 = ia(i)
+         do 12 k=k1,k2,-1
+            ir(k) = i
+ 12      continue
+ 13   continue
+      return
+      end
+        
 c*********************************************************************72
 c
 cc CSRCSC converts Compressed Sparse Row to Compressed Sparse Column.
@@ -765,7 +1423,6 @@ c
                stop
                return
             end if
-c            print*,i,j,a(k)
             dns(i,j) = a(k)
  3       continue
  4    continue
