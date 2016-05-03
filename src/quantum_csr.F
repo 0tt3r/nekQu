@@ -556,10 +556,21 @@ c     row i
 
 !     Now write the coo matrix to file
       if(nid.eq.0) then
-         open(unit=20,file='ham_tilde')
+         !count real nnz
+         nnz_b = 0
          do ii=1,nnz_c
             if(c(ii).ne.0.0) then
-               write(20,'(g30.15,2i7)') c(ii),jc(ii),ic(ii)
+               nnz_b = nnz_b + 1
+            endif
+         enddo
+
+         open(unit=20,file='ham_tilde')
+         !Write nstate, nnz_c
+         write(20,*) nstate, nnz_b
+         do ii=1,nnz_c
+            !We subtract 1 to count from 0 for C code
+            if(c(ii).ne.0.0) then
+               write(20,'(es20.13,2i7)') c(ii),jc(ii)-1,ic(ii)-1
             endif
          enddo
          close(unit=20)
@@ -663,24 +674,23 @@ c     row i
          call aplb(nstate2,nstate2,1,c,jc,ic,L,jL,iL,b,jb,ib,
      $        nstate2*nstate,iw,ierr)
         
-         print*,lin_mxm_a(iOp)
 !     Copy b to L_tilde and multiply by the scalar
          do ii=1,nstate2
             iL(ii) = ib(ii)
             do kk=ib(ii),ib(ii+1)
                jL(kk) = jb(kk)
                L(kk)  = lin_mxm_a(iOp)*b(kk)
-               print*,'L(kk) ',L(kk)
             enddo
          enddo
          iL(nstate2+1) = ib(nstate2+1)
       enddo
       
-      call csrdns(nstate2,nstate2,L,
-     $     jL,iL,op,nstate2,ierr)
-      do ii=1,nstate2
-         write(20,'(300g15.5)') (op(ii,jj), jj=1,nstate2)
-      enddo
+c$$$      call csrdns(nstate2,nstate2,L,
+c$$$     $     jL,iL,op,nstate2,ierr)
+c$$$
+c$$$      do ii=1,nstate2
+c$$$         write(20,'(300g15.5)') (op(ii,jj), jj=1,nstate2)
+c$$$      enddo
       
 
       
@@ -689,9 +699,18 @@ c     row i
 !     Now write the coo matrix to file
       if(nid.eq.0) then
          open(unit=20,file='l_tilde')
+         !count real nnz
+         nnz_b = 0
          do ii=1,nnz_c
             if(L(ii).ne.0.0) then
-               write(20,'(g35.15,2i9)') L(ii),jL(ii),iL(ii)
+               nnz_b = nnz_b + 1
+            endif
+         enddo
+         write(20,*)nnz_b
+         do ii=1,nnz_c
+            !We subtract 1 to count from 0 for C code
+            if(L(ii).ne.0.0) then
+               write(20,'(g35.15,2i9)') L(ii),jL(ii)-1,iL(ii)-1
             endif
          enddo
          close(unit=20)
