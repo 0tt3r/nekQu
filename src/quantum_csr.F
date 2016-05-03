@@ -569,8 +569,9 @@ c     row i
          write(20,*) nstate, nnz_b
          do ii=1,nnz_c
             !We subtract 1 to count from 0 for C code
+            !Also, it's -i * [H,p], so add the -1
             if(c(ii).ne.0.0) then
-               write(20,'(es20.13,2i7)') c(ii),jc(ii)-1,ic(ii)-1
+               write(20,'(es20.13,2i7)') -c(ii),jc(ii)-1,ic(ii)-1
             endif
          enddo
          close(unit=20)
