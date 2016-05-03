@@ -28,6 +28,8 @@
 *.x86_64
 *.hex
 gslib_test
+nekQ
+quantum_ss
 nekcem
 SIZE
 subuser.F
