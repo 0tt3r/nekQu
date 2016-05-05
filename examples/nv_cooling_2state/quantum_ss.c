@@ -8,13 +8,6 @@ T*/
 /*
    Description: Solves a complex linear system in parallel with KSP.
 
-   The model problem:
-      Solve Helmholtz equation on the unit square: (0,1) x (0,1)
-          -delta u - sigma1*u + i*sigma2*u = f,
-           where delta = Laplace operator
-      Dirichlet b.c.'s on all sides
-      Use the 2-D, five-point finite difference stencil.
-
    Compiling the code:
       This code uses the complex numbers version of PETSc, so configure
       must be run to enable this
@@ -30,6 +23,7 @@ T*/
 */
 #include <petscksp.h>
 #include <stdio.h>
+#include <petsctime.h>
 
 #undef __FUNCT__
 #define __FUNCT__ "main"
@@ -38,27 +32,28 @@ int main(int argc,char **args)
   Vec            x,b;      /* approx solution, RHS, exact solution */
   Mat            A;            /* linear system matrix */
   KSP            ksp;         /* linear solver context */
-  PetscReal      norm;         /* norm of solution error */
-  PetscInt       dim,i,Istart,Iend,n = 6,its;
-  PetscInt       ham_nnz,lin_nnz;
+  PetscInt       dim,i,j,Istart,Iend,n = 6,its,num_state;
+  PetscInt       ham_nnz,lin_nnz,x_low,x_high;
   PetscErrorCode ierr;
   PetscScalar    mat_tmp,one = 1.0,*xa;
-  PetscRandom    rctx;
-  FILE           *fp_ham,*fp_lin;
-  double         *ham,*lin;
-  int            *ham_row,*ham_col,nid;
+  PetscReal      tmp_real;
+  FILE           *fp_ham,*fp_lin,*fp_state;
+  double         *ham,*lin,sum,*pops;
+  int            *ham_row,*ham_col,nid,row,col,**cur_state;
   int            *lin_row,*lin_col,initial_guess,initial_guess_index;
+  PetscLogDouble  t1,t2;
 
   PetscInitialize(&argc,&args,(char*)0,NULL);
 #if !defined(PETSC_USE_COMPLEX)
   SETERRQ(PETSC_COMM_WORLD,1,"This example requires complex numbers");
 #endif
+
   initial_guess = 0;
   ierr=MPI_Comm_rank(PETSC_COMM_WORLD,&nid);
-
+  PetscGetCPUTime(&t1);
   fp_ham = fopen("ham_tilde","r");
   fscanf(fp_ham,"%d %d",&n,&ham_nnz);
-  printf("nstate: %d %d\n",n,ham_nnz);
+  if(nid==0) printf("nstate: %d %d\n",n,ham_nnz);
 
   ham     = malloc(ham_nnz*sizeof(double));
   ham_row = malloc(ham_nnz*sizeof(int));
@@ -67,7 +62,7 @@ int main(int argc,char **args)
   for(i=0;i<ham_nnz;i++){
     fscanf(fp_ham,"%lf %d %d",&ham[i],&ham_col[i],&ham_row[i]);
   }
-
+  if(nid==0) printf("read ham\n");
   fp_lin = fopen("l_tilde","r");
   fscanf(fp_lin,"%d",&lin_nnz);
   lin     = malloc(lin_nnz*sizeof(double));
@@ -77,7 +72,7 @@ int main(int argc,char **args)
   for(i=0;i<lin_nnz;i++){
     fscanf(fp_lin,"%lf %d %d",&lin[i],&lin_col[i],&lin_row[i]);
   }
-
+  if(nid==0) printf("read lin\n");
   dim  = n*n;
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -90,8 +85,11 @@ int main(int argc,char **args)
      runtime. Also, the parallel partitioning of the matrix is
      determined by PETSc at runtime.
   */
-  ierr = MatCreate(PETSC_COMM_WORLD,&A);CHKERRQ(ierr);
-  ierr = MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);CHKERRQ(ierr);
+  ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
+                      5*n,NULL,5*n,NULL,&A);CHKERRQ(ierr);
+  /* ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
+  /*                     1000,NULL,100,NULL,&A);CHKERRQ(ierr); */
+  //  ierr = MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);CHKERRQ(ierr);
   ierr = MatSetFromOptions(A);CHKERRQ(ierr);
   ierr = MatSetUp(A);CHKERRQ(ierr);
 
@@ -115,30 +113,47 @@ int main(int argc,char **args)
     loop through ham; if I own the row, then add it to the matrix
    */
   for (i=0;i<ham_nnz;i++){
-    if(ham_row[i]<Iend&&ham_row[i]>Istart) {
+    if(ham_row[i]<Iend&&ham_row[i]>=Istart) {
       mat_tmp = 0. + ham[i]*PETSC_i;
-      ierr = MatSetValues(A,1,&ham_row[i],1,&ham_col[i],&mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+      ierr = MatSetValue(A,ham_row[i],ham_col[i],mat_tmp,ADD_VALUES);CHKERRQ(ierr);
     }
   }
 
+  if(nid==0) printf("set Ham\n");
   /*
     Set Lindblad matrix elements
     loop through ham; if I own the row, then add it to the matrix
    */
-
+  
   for (i=0;i<lin_nnz;i++){
-    if(lin_row[i]<Iend&&lin_row[i]>Istart) {
+    if(lin_row[i]<Iend&&lin_row[i]>=Istart) {
       mat_tmp = lin[i] + 0.*PETSC_i;
       ierr = MatSetValues(A,1,&lin_row[i],1,&lin_col[i],&mat_tmp,ADD_VALUES);CHKERRQ(ierr);
     }
   }
+
+  if(nid==0) printf("set lin\n");
+  /*
+    Add elements to the matrix to make the normalization work
+    I have no idea why this works, I am copying it from qutip
+    We add 1.0 in the 0th spot and every n+1 after
+  */
+  if(nid==0) {
+    row = 0;
+    for(i=0;i<n;i++){
+      col = i*(n+1);
+      mat_tmp = 1.0 + 0.*PETSC_i;
+      ierr = MatSetValues(A,1,&row,1,&col,&mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+    }
+  }
+  if(nid==0) printf("set struc\n");
   /*
     Set diagonal to 0
    */
   for(i=Istart;i<Iend;i++){
       mat_tmp = 0 + 0.*PETSC_i;
-      ierr = MatSetValues(A,1,&i,1,&i,&mat_tmp,ADD_VALUES);CHKERRQ(ierr);
-  }    
+      ierr = MatSetValue(A,i,i,mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+  }
   /*
      Assemble matrix, using the 2-step process:
        MatAssemblyBegin(), MatAssemblyEnd()
@@ -147,6 +162,7 @@ int main(int argc,char **args)
   */
   ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
   ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  if(nid==0) printf("assembly done\n");
   //  MatView(A,PETSC_VIEWER_STDOUT_WORLD);
   /*
      Create parallel vectors.
@@ -172,15 +188,19 @@ int main(int argc,char **args)
 
   ierr = VecSet(x,0.0);
   initial_guess_index = initial_guess*n + initial_guess;
-  initial_guess_index = 0;
-  VecSetValues(x,1,&initial_guess_index,&one,ADD_VALUES);
-  VecSetValues(b,1,&initial_guess_index,&one,ADD_VALUES);
+
+  if(nid==0) {
+    VecSetValues(x,1,&initial_guess_index,&one,INSERT_VALUES);
+    initial_guess_index = 0;  
+    VecSetValues(b,1,&initial_guess_index,&one,INSERT_VALUES);
+  }
   VecAssemblyBegin(x);
   VecAssemblyEnd(x);
 
   VecAssemblyBegin(b);
   VecAssemblyEnd(b);
-
+  PetscGetCPUTime(&t2);
+  if(nid==0) printf("setup time: %f\n",t2-t1);
   ierr = VecGetArray(b,&xa);CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_WORLD,"The first three entries of x are:\n");CHKERRQ(ierr);
   for (i=0; i<3; i++) {
@@ -213,7 +233,7 @@ int main(int argc,char **args)
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
+  
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -224,21 +244,75 @@ int main(int argc,char **args)
       Print the first 3 entries of x; this demonstrates extraction of the
       real and imaginary components of the complex vector, x.
   */
-  ierr = VecGetArray(x,&xa);CHKERRQ(ierr);
+  //  VecView(x,PETSC_VIEWER_STDOUT_WORLD);
+
+  // Normalize (in the quantum sense, trace(rho) = 1.0)
+  /* ierr = VecGetArray(x,&xa);CHKERRQ(ierr); */
+  /* sum = 0.0; */
+  /* for(i=0;i<n;i++) { */
+  /*   sum += (double)PetscRealPart(xa[i*n+i]); */
+  /* } */
+  /* //  VecScale(x,1/sum); */
+  /* //   VecView(x,PETSC_VIEWER_STDOUT_WORLD); */
+  /* printf("sum: %f\n",sum); */
+
+  /* 
+     Get populations by multiplying by curState_vec
+  */
+
+  fp_state = fopen("cur_state","r");
+  fscanf(fp_state,"%d",&num_state);
+
+  int* block = (int*)malloc(n*num_state*sizeof(int));
+  cur_state = (int**)malloc(n*sizeof(int*));
+  for (i=0;i<n;i++) {
+    cur_state[i] = block + num_state * i;
+  }
+
+  for(i=0;i<n;i++){
+    for(j=0;j<num_state;j++){
+      fscanf(fp_state,"%d",&cur_state[i][j]);
+    }
+  }
   ierr = PetscPrintf(PETSC_COMM_WORLD,"The first three entries of x are:\n");CHKERRQ(ierr);
+  ierr = VecGetOwnershipRange(x,&x_low,&x_high);
+  ierr = VecGetArray(x,&xa);CHKERRQ(ierr); 
+
+  pops = (double*)malloc(num_state*sizeof(double));
+  for(i=0;i<num_state;i++){
+    pops[i] = 0.0;
+  }
+
+  for(i=0;i<n;i++){
+    if((i*n+i)>=x_low&&(i*n+i)<x_high) {
+      tmp_real = (double)PetscRealPart(xa[i*(n)+i-x_low]);
+      for(j=0;j<num_state;j++){
+        pops[j] += cur_state[i][j]*tmp_real;
+      }
+    }
+  } 
+  if(nid==0) {
+    MPI_Reduce(MPI_IN_PLACE,pops,num_state,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+  } else {
+    MPI_Reduce(pops,pops,num_state,MPI_DOUBLE,MPI_SUM,0,MPI_COMM_WORLD);
+  }
+  if(nid==0) {
+    printf("Populations: ");
+    for(i=0;i<num_state;i++){
+      printf(" %f ",pops[i]);
+    }
+    printf("\n");
+  }
+    
   for (i=0; i<3; i++) {
     ierr = PetscPrintf(PETSC_COMM_WORLD,"x[%D] = %g + %g i\n",i,(double)PetscRealPart(xa[i]),(double)PetscImaginaryPart(xa[i]));CHKERRQ(ierr);
   }
   ierr = VecRestoreArray(x,&xa);CHKERRQ(ierr);
 
 
-  ierr = VecNorm(x,NORM_2,&norm);CHKERRQ(ierr);
   ierr = KSPGetIterationNumber(ksp,&its);CHKERRQ(ierr);
-  if (norm < 1.e-12) {
-    ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error < 1.e-12 iterations %D\n",its);CHKERRQ(ierr);
-  } else {
-    ierr = PetscPrintf(PETSC_COMM_WORLD,"Norm of error %g iterations %D\n",(double)norm,its);CHKERRQ(ierr);
-  }
+
+  ierr = PetscPrintf(PETSC_COMM_WORLD,"iterations %D\n",its);CHKERRQ(ierr);
 
   /*
      Free work space.  All PETSc objects should be destroyed when they
@@ -248,5 +322,8 @@ int main(int argc,char **args)
   ierr = VecDestroy(&x);CHKERRQ(ierr);
   ierr = VecDestroy(&b);CHKERRQ(ierr); ierr = MatDestroy(&A);CHKERRQ(ierr);
   ierr = PetscFinalize();
+
+  free (cur_state[0]);
+  free (cur_state);
   return 0;
 }

@@ -8,7 +8,7 @@ c#####################################################################
 c ... NEKCEM: Main Program                
 
       PROGRAM NEKQ
-
+      
       call iniproc2
       call useriniQ
       call exitt()

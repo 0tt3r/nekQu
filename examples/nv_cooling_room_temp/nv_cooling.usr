@@ -25,7 +25,7 @@ c-----------------------------------------------------------------------
       !nv(4) = |e+> = ep, nv(5)=|e0>=e0, nv(6)=|e->=em
       !nv(7) = |s>  = s
       integer num_nv
-      parameter (num_nv = 2)
+      parameter (num_nv = 3)
       integer nv(7,num_nv),gp(num_nv),g0(num_nv),gm(num_nv)
       integer ep(num_nv),e0(num_nv),em(num_nv),s(num_nv)
       integer gpgp(num_nv),epep(num_nv),e0e0(num_nv)
@@ -44,7 +44,7 @@ c-----------------------------------------------------------------------
       !parameters
       real w_m,E_e,E_s,D_e,Omega,gamma_opt,lambda_g,lambda_e,lambda_s
       real k42,k31,k45,k35,k52,k51,Tg2,Te2,Tg1,Q,prefactor
-
+      
       !Units
       real kHz,MHz,GHz,THz,ns,us
       !Read the simple input
@@ -63,7 +63,6 @@ c$$$      call MPI_BCAST(g_couple3,1,MPI_REAL8,0,MPI_COMM_WORLD,IERR)
       THz = GHz*1e3
       pi          = 4.*ATAN(1.0)      
 
-      
       timeunit= 2.418884326505e-17 !in a.u.
       ns = 1e-9/timeunit
       us = 1e-6/timeunit
@@ -103,12 +102,13 @@ c$$$      timemax     = 0.3e-6/timeunit
 c$$$      nqstep      = 18000
 
       call quantum_setup_initialize()
-
+      nid = 0
+      np  = 1
       timemax     = 100.e-6/timeunit
       nqstep      = 10000000
       nqstep_print = 3000
       print_during_run = .true.
-      num_phon = 16
+      num_phon = 8
 
 !     Create basic operators
 
@@ -119,7 +119,9 @@ c$$$      nqstep      = 18000
 
       call quantum_finalize_op_csr()
 
-
+      nnzmax = nstate2
+      nnzmax = nnzmax*300_8
+      print*,'nnzmax',nnzmax,nstate2
       do i=1,num_nv
          gp(i) = nv(1,i)             !|g+>
          g0(i) = nv(2,i)             !|g0>
@@ -199,8 +201,9 @@ c$$$      call quantum_add_to_ham_csr(sig_g2,lambda_g,0)
          call quantum_add_to_ham_csr(sig_e2(i),lambda_s,0)     
       enddo
       call quantum_ham_finalize_csr()
-
-      call quantum_print_ham()
+      call quantum_kron_ham()
+      call quantum_print_state_vec()
+!      call quantum_print_ham()
 
       !Lindblad terms
       !L_{i,f} = -2*|f><i|rho|i><f| + |i><i|rho + rho|i><i|
@@ -269,11 +272,13 @@ c$$$      call quantum_lin_add(gmg0,g0g0,-1/(2*tg1))
 !      print*,'after lin_add'
       prefactor = w_m/(2*Q)*N_th
       call quantum_lin_add(at,a_at,-prefactor)
-
+   
 !      call quantum_lin_add_trans(a,an,-prefactor)
 !      print*,'after lin_add2'
 
-      call quantum_lin_finalize()
+!      call quantum_lin_finalize()
+      call quantum_kron_lin()
+      call exitt()
 !      call cem_quantum3_propagation_exp
       call cem_quantum3_steadystate_gmres
 !      call cem_quantum3_propagation_rk

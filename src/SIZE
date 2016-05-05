@@ -2,12 +2,12 @@ c     Dimension file to be included
                                         
 c     Arrays for Quantum Model calculations
       integer    maxTimeSteps,maxN,maxOp,maxE,lp,nid,larnol 
-      parameter (maxTimeSteps = 100001) ! Max number of time steps
-      parameter (maxN    = 150 )       ! Max Hilbert space size 
-      parameter (maxOp   = 30  )       ! Max number of operators
+      parameter (maxTimeSteps = 300) ! Max number of time steps
+      parameter (maxN    = 2800 )       ! Max Hilbert space size 
+      parameter (maxOp   = 100  )       ! Max number of operators
       parameter (maxE    = 1 )       ! Max number of energy slices
       parameter (lp      = 1  )       ! Max number of processors
-      parameter (larnol = 500  )        ! Max arnoldi subspace size for exponential timestepping
+      parameter (larnol = 1  )        ! Max arnoldi subspace size for exponential timestepping
       COMMON /DIMN/
      $           NID
 

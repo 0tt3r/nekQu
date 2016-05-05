@@ -57,7 +57,7 @@ NOBJS = $(CORE) $(OS) $(JO) $(MXM)
 L0 = -O0 $(OPT_OPTIONS)    
 L2 = -O2 $(OPT_OPTIONS)
 L3 = -O3 $(OPT_OPTIONS)
-L4 = -O3 $(OPT_OPTIONS) # 10/13/14 Azamat: temporarily switching from O4 to pass crayftn
+L4 = -O4 $(OPT_OPTIONS) # 10/13/14 Azamat: temporarily switching from O4 to pass crayftn
 HMT   = #-DHPM -Dr8 -DDEBUG -DMPISRC -DSINGLE_DIR # -DBLAS
 
 ###

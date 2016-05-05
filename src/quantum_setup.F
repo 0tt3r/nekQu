@@ -25,21 +25,21 @@
       pi               = 4.*ATAN(1.0)
       pulse_omega_0    = 0.0
       !Zero out the gates_table
-      do ii=1,6
-         do jj = 1,maxOp
-            gates_table(ii,jj) = 0
-         enddo
-      enddo
+c$$$      do ii=1,6
+c$$$         do jj = 1,maxOp
+c$$$            gates_table(ii,jj) = 0
+c$$$         enddo
+c$$$      enddo
 
       !zero out the cnot_table and crk_table
-      do ii=1,maxOp
-         do jj=1,maxOp
-            cnot_table(ii,jj) = 0
-            do kk=1,maxOp
-               crk_table(ii,jj,kk)  = 0
-            enddo
-         enddo
-      enddo
+c$$$      do ii=1,maxOp
+c$$$         do jj=1,maxOp
+c$$$            cnot_table(ii,jj) = 0
+c$$$            do kk=1,maxOp
+c$$$               crk_table(ii,jj,kk)  = 0
+c$$$            enddo
+c$$$         enddo
+c$$$      enddo
 
       nqstep_print = -1
       end
@@ -92,7 +92,7 @@
          enddo
       enddo
 
-      lin_tiling_N(numberOfOps) = quantN
+!      lin_tiling_N(numberOfOps) = quantN
       quantN = quantN*qlevel
 
       oldN(numberOfOps)   = quantN
@@ -148,7 +148,7 @@
          vec_state(-vec(ii)) = ii-1
       enddo
 
-      lin_tiling_N(numberOfOps) = quantN
+!      lin_tiling_N(numberOfOps) = quantN
       quantN = quantN*qlevel
 
       oldN(numberOfOps)   = quantN
@@ -312,12 +312,12 @@
 c      print*,'after check two',nid
      
       !Now that we have sizes, 0 out operators
-
-      do jj=1,nstate_np
-         do ii=1,nstate
-            lin_comb_op(ii,jj) = 0.0
-         enddo
-      enddo
+c$$$
+c$$$      do jj=1,nstate_np
+c$$$         do ii=1,nstate
+c$$$            lin_comb_op(ii,jj) = 0.0
+c$$$         enddo
+c$$$      enddo
 
 
       do ii=1,numberOfOps
@@ -398,11 +398,11 @@ c$$$      enddo
             enddo
          enddo
       else
-         do jj=1,nstate_np
-            do kk=1,nstate
-               state_sums(kk,jj) = 0
-            enddo
-         enddo
+c$$$         do jj=1,nstate_np
+c$$$            do kk=1,nstate
+c$$$               state_sums(kk,jj) = 0
+c$$$            enddo
+c$$$         enddo
       endif
       ! Initialize a hamiltonian array
       do jj=1,nstate
@@ -574,6 +574,68 @@ c$$$       enddo
 
       end
 
+!**********************************************************************
+      subroutine quantum_print_state_vec()
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+      
+      integer ii,jj,kk,ll,num_pops
+      integer curState_vec(maxOp),curState,tilingNumber
+
+c     Find populations 
+
+      open(unit=20,file='cur_state')
+      !Count number of pops
+      num_pops = 0
+      do ii=1,numberOfOps
+         print*,is_vec(ii),ii
+         if(is_vec(ii).eqv..true.) then
+            num_pops=num_pops+levels(ii)
+         else
+            num_pops=num_pops+1
+         endif
+      enddo
+      write(20,'(i7)') num_pops
+
+      do jj=1,nstate_np
+         ll=1
+         do ii=1,numberOfOps
+            tilingNumber = oldN(ii)
+            if(is_vec(ii).eqv..true.) then
+!if the operator is a vec operator, then we loop through each
+!level of the vec operator, which is treated as a series of 
+            !individual populations. If the curState is equal to the
+            !operator we are looking at, then we add the population
+            !This could be sped up, since we could go through jj
+            !once, with more if statement
+
+            !FIXME - pop_time size may need a firmer check now
+               do kk=1,levels(ii)
+                  curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
+!                  currentPop = real(rho_r(jj+c_offset,jj))
+                  if(curState.eq.kk-1) then
+!     print*,curState,currentPop
+                     curState_vec(ll) = 1
+                  else
+                     curState_vec(ll) = 0.0
+                  endif
+                  ll=ll+1
+               enddo
+            else
+               curState = state(ii,mod(jj+c_offset-1,tilingNumber)+1)
+               curState_vec(ll) = curState
+               ll=ll+1
+            endif
+         enddo
+
+         write(20,'(10i7)') (curState_vec(kk),kk=1,ll-1)
+
+      enddo
+
+
+      end
+
 
 !**********************************************************************
       subroutine quantum_add_to_ham_csr(handle,scalar,timeDep)
@@ -585,7 +647,7 @@ c$$$       enddo
       real    scalar
             
 
-      nzmax = maxN*maxN/lp
+      nzmax = maxN*maxN/15
       
       do ii=1,nzmax !Consider changing this size - but to what?
          ham_a(ii) = op_csr_a(ii,handle)*scalar
@@ -746,7 +808,7 @@ c$$$      end
             print*,'TOO MANY LINOPS',numberOfLinOps,
      $           ' FOR THIS MAXOP/2', MAXOP/2
          endif
-         call exitt()
+!         call exitt()
       endif
       iOp = numberOfLinOps
 
@@ -754,6 +816,7 @@ c$$$      end
       lin_mxm_op(1,iOp) = handle1
       lin_mxm_op(2,iOp) = handle2
       lin_mxm_a(iOp)    = scalar
+      return
       !FIXME: handle2/3 is dangerous - put a check or think of a better way!
       op_num = handle_to_op(handle2)
       
@@ -1510,7 +1573,8 @@ c$$$      enddo
          enddo
 
 !subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
-         call coocsr(2**(n),kk,quantum_gate_coo_a,quantum_gate_coo_ia,
+         call coocsr_complex(2**(n),kk,quantum_gate_coo_a,
+     $        quantum_gate_coo_ia,
      $        quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
      $        quantum_gate_csr_ja(1,generated_gates),
      $        quantum_gate_csr_ia(1,generated_gates))
@@ -1713,7 +1777,8 @@ c$$$                 endif
          enddo
 
 !subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
-         call coocsr(2**(n),kk,quantum_gate_coo_a,quantum_gate_coo_ia,
+         call coocsr_complex(2**(n),kk,quantum_gate_coo_a,
+     $        quantum_gate_coo_ia,
      $        quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
      $        quantum_gate_csr_ja(1,generated_gates),
      $        quantum_gate_csr_ia(1,generated_gates))
@@ -1994,7 +2059,8 @@ c$$$      enddo
       ! Convert the COO matrix to CSR
 
       !subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
-      call coocsr(2**(n),i_coo_a,quantum_gate_coo_a,quantum_gate_coo_ia,
+      call coocsr_complex(2**(n),i_coo_a,quantum_gate_coo_a,
+     $     quantum_gate_coo_ia,
      $     quantum_gate_coo_ja,quantum_gate_csr_a(1,generated_gates),
      $     quantum_gate_csr_ja(1,generated_gates),
      $     quantum_gate_csr_ia(1,generated_gates))

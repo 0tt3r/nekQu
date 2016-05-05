@@ -10,7 +10,7 @@ c     GMRES iteration.
       real     c_gm(larnol),s_gm(larnol),gamma(larnol+1)
       
 
-      tol = 1e-14 !move to user input
+      tol = 1e-20 !move to user input
 
       iter  = 0
       m     = larnol

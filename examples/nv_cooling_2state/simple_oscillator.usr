@@ -82,7 +82,7 @@ c$$$      nqstep      = 18000
       call quantum_set_minimum_op(0,an)
 
       call quantum_finalize_op_csr()
-
+      nnzmax = nstate2*nstate
       call quantum_combine_op_csr(a,at,1,a_at)
 
 !Oscillator terms
@@ -103,13 +103,15 @@ c$$$      nqstep      = 18000
 c$$$
 c$$$
 c$$$      !Mechanical resonator dissipation
-      kappa = 0.1*(N_th+1)
-      call quantum_lin_add(a,an,-kappa)
 c$$$
 
-      kappa = 0.1*N_th
+      kappa = 1*(N_th+1)
+      call quantum_lin_add(a,an,-kappa)
+
+      kappa = 1*N_th
       call quantum_lin_add(at,a_at,-kappa)
-c$$$
+
+
 !     Do lin_add_trans to get lin_comb_op to be correct
 !     for preconditioning - NOT A GOOD WAY TO DO THIS
 !      call quantum_lin_add_trans(a,an,-prefactor)
@@ -117,7 +119,7 @@ c$$$!      print*,'after lin_add2'
 c$$$
       call quantum_lin_finalize()
       call quantum_kron_lin()
-
+      call exitt()
 !      call make_hamiltonian_and_lin(min_phonon_num)
 
 !      call cem_quantum3_propagation_exp

@@ -155,10 +155,11 @@ c work arrays:
 c
 c iw      = integer work array of length equal to the number of
 c   columns in A.
-c
-      double precision a(*), b(*), c(*)
-      integer ja(*),jb(*),jc(*),ia(nrow+1),ib(nrow+1),ic(nrow+1),
-     $     iw(ncol)
+c     
+      integer*8 nzmax
+      double precision a(nzmax), b(nzmax), c(nzmax)
+      integer ja(nzmax),jb(nzmax),jc(nzmax),ia(nrow+1),
+     $     ib(nrow+1),ic(nrow+1),iw(ncol)
       logical values
 
       values = (job .ne. 0)
@@ -168,6 +169,7 @@ c
       do 1 j=1, ncol
          iw(j) = 0
  1    continue
+
 
       do 500 ii=1, nrow
 c     row i
@@ -244,8 +246,9 @@ c         indices in each are not in increasing order) use coocsr
 c         if you want them sorted.
 c
 c  Coded by Y. Saad, Sep. 26 1989
-c
-      integer ia(nnz),ja(nnz),iwk(n)
+c TEMP INCREASED SIZE OF THESE ARRAYS
+      integer*8 nnz
+      integer ia(nnz*10),ja(nnz),iwk(n+1)
       double precision a(*)
       double precision t,tnext
       logical values
@@ -313,6 +316,7 @@ c
 c  restart chasing.
 c
       goto 5
+
  70   do 80 i=1,n
          ia(i+1) = iwk(i)
  80   continue
@@ -322,6 +326,75 @@ c
 
 c*********************************************************************72
       subroutine coocsr(nrow,nnz,a,ir,jc,ao,jao,iao)
+
+c*********************************************************************72
+c
+cc COOCSR converts COO to CSR.
+c
+c converts a matrix that is stored in coordinate format
+c  a, ir, jc into a row general sparse ao, jao, iao format.
+c
+c on entry:
+c
+c nrow      = dimension of the matrix
+c nnz      = number of nonzero elements in matrix
+c a,
+c ir,
+c jc    = matrix in coordinate format. a(k), ir(k), jc(k) store the nnz
+c         nonzero elements of the matrix with a(k) = actual real value of
+c         the elements, ir(k) = its row number and jc(k) = its column
+c        number. The order of the elements is arbitrary.
+c
+c on return:
+c
+c ir       is destroyed
+c
+c ao, jao, iao = matrix in general sparse matrix format with ao
+c       continung the real values, jao containing the column indices,
+c      and iao being the pointer to the beginning of the row,
+c      in arrays ao, jao.
+c
+c Notes:
+c This routine is NOT in place.  See coicsr
+c
+      real a(*),ao(*),x
+      integer ir(*),jc(*),jao(*),iao(*)
+
+      do 1 k=1,nrow+1
+         iao(k) = 0
+ 1           continue
+c determine row-lengths.
+      do 2 k=1, nnz
+         iao(ir(k)) = iao(ir(k))+1
+ 2           continue
+c starting position of each row.
+      k = 1
+      do 3 j=1,nrow+1
+         k0 = iao(j)
+         iao(j) = k
+         k = k+k0
+ 3           continue
+c go through the structure  once more. Fill in output matrix.
+      do 4 k=1, nnz
+         i = ir(k)
+         j = jc(k)
+         x = a(k)
+         iad = iao(i)
+         ao(iad) =  x
+         jao(iad) = j
+         iao(i) = iad+1
+ 4           continue
+c shift back iao
+      do 5 j=nrow,1,-1
+         iao(j+1) = iao(j)
+ 5           continue
+      iao(1) = 1
+      return
+      end
+
+
+c*********************************************************************72
+      subroutine coocsr_complex(nrow,nnz,a,ir,jc,ao,jao,iao)
 
 c*********************************************************************72
 c
@@ -496,13 +569,12 @@ c     row i
       include 'QUANT'
 
       integer handle1,handle2,nnz_c
-      integer jc(*),ic(*)
+      integer jc(*),ic(*),ii,kk
       real    c(*)
       call quantum_csr_kron(op_csr_a(1,handle1),op_csr_ja(1,handle1),
      $     op_csr_ia(1,handle1),nstate,nstate,op_csr_a(1,handle2),
      $     op_csr_ja(1,handle2),op_csr_ia(1,handle2),nstate,nstate,
-     $     c,jc,ic,nnz_c)
-
+     $     c,jc,ic,nnzmax)
 
       end
 
@@ -515,15 +587,17 @@ c     row i
       include 'SIZE'
       include 'QUANT'
 
-      integer ja(nstate2*nstate),ia(nstate2*nstate),nnz_a
-      real a(nstate2*nstate)
-      integer jb(nstate2*nstate),ib(nstate2*nstate),nnz_b
-      real b(nstate2*nstate)
-      integer jc(nstate2*nstate),ic(nstate2*nstate),nnz_c
-      real c(nstate2*nstate)
+!MaxTimesteps is a proxy for nnz - FIXME CHANGE
+      integer ja(nnzmax),ia(nstate2+1),nnz_a
+      real a(nnzmax)
+      integer jb(nnzmax),ib(nstate2+1),nnz_b
+      real b(nnzmax)
+      integer jc(nnzmax),ic(nstate2+1),nnz_c
+      real c(nnzmax)
       integer i_eye(nstate+1),j_eye(nstate),iw(nstate2)
-      real eye(nstate),op(nstate2,nstate2)
+      real eye(nstate)
       integer ii,jj,ierr,kk
+
 !     Construct identity matrix in csr format
       do ii=1,nstate
          eye(ii) = 1.0
@@ -534,46 +608,75 @@ c     row i
 
       !Do a = I cross H
       call quantum_csr_kron(eye,j_eye,i_eye,nstate,nstate,
-     $     ham_i,ham_ja,ham_ia,nstate,nstate,a,ja,ia)
+     $     ham_i,ham_ja,ham_ia,nstate,nstate,a,ja,ia,
+     $        nnzmax)
 
       !Do b = H cross I
       call quantum_csr_kron(ham_i,ham_ja,ham_ia,nstate,nstate,
-     $     eye,j_eye,i_eye,nstate,nstate,b,jb,ib)
-
+     $     eye,j_eye,i_eye,nstate,nstate,b,jb,ib,
+     $        nnzmax)
 !Make all elements in b negative, because we want I cross H - H cross I
       do ii=1,nstate2
          do kk=ib(ii),ib(ii+1)-1
             b(kk) = -b(kk)
          enddo
       enddo
-
+      
+      
+      print*,ia(2),ia(3)
+      print*,ib(2),ib(3)
 
 !Add a and b
       call aplb(nstate2,nstate2,1,a,ja,ia,b,jb,ib,c,jc,ic,
-     $     nstate2*nstate,iw,ierr)
+     $     nnzmax,iw,ierr)
+      if(ierr.gt.0) then
+         print*,'APLB ERROR! C NOT BIG ENOUGH'
+         call exitt()
+      endif
 
-      call csrcoo(nstate2,1,nstate2*nstate,c,jc,ic,nnz_c,c,ic,jc,ierr)
+c$$$      call csrcoo(nstate2,1,nnzmax,
+c$$$     $     c,jc,ic,nnz_c,c,ic,jc,ierr)
 
 !     Now write the coo matrix to file
       if(nid.eq.0) then
-         !count real nnz
-         nnz_b = 0
-         do ii=1,nnz_c
-            if(c(ii).ne.0.0) then
-               nnz_b = nnz_b + 1
-            endif
-         enddo
 
          open(unit=20,file='ham_tilde')
-         !Write nstate, nnz_c
-         write(20,*) nstate, nnz_b
-         do ii=1,nnz_c
-            !We subtract 1 to count from 0 for C code
-            !Also, it's -i * [H,p], so add the -1
-            if(c(ii).ne.0.0) then
-               write(20,'(es20.13,2i7)') -c(ii),jc(ii)-1,ic(ii)-1
-            endif
+         nnz_b = 0
+         do ii=1,nstate2
+            do kk=ic(ii),ic(ii+1)-1
+               if(c(kk).ne.0.0) then
+                  nnz_b = nnz_b + 1
+               endif
+            enddo
          enddo
+         write(20,*)nstate,nnz_b
+
+         do ii=1,nstate2
+            do kk=ic(ii),ic(ii+1)-1
+               if(c(kk).ne.0) then
+                  write(20,'(g35.15,2i14)')c(kk),jc(kk)-1,ii-1
+               endif
+            enddo
+         enddo
+c$$$
+c$$$         !count real nnz
+c$$$         nnz_b = 0
+c$$$         do ii=1,nnz_c
+c$$$            if(c(ii).ne.0.0) then
+c$$$               nnz_b = nnz_b + 1
+c$$$            endif
+c$$$         enddo
+c$$$
+c$$$         open(unit=20,file='ham_tilde')
+c$$$         !Write nstate, nnz_c
+c$$$         write(20,*) nstate, nnz_b
+c$$$         do ii=1,nnz_c
+c$$$            !We subtract 1 to count from 0 for C code
+c$$$            !Also, it's -i * [H,p], so add the -1
+c$$$            if(c(ii).ne.0.0) then
+c$$$               write(20,'(es20.13,2i14)') -c(ii),jc(ii)-1,ic(ii)-1
+c$$$            endif
+c$$$         enddo
          close(unit=20)
       endif
       
@@ -595,19 +698,21 @@ c     row i
       include 'SIZE'
       include 'QUANT'
 
-      integer ja(nstate2*nstate),ia(nstate2*nstate),nnz_a
-      real a(nstate2*nstate)
-      integer jb(nstate2*nstate),ib(nstate2*nstate),nnz_b
-      real b(nstate2*nstate)
-      integer jc(nstate2*nstate),ic(nstate2*nstate),nnz_c
-      real c(nstate2*nstate)
-      integer jL(nstate2*nstate),iL(nstate2*nstate)
-      real L(nstate2*nstate)
+      integer ja(nnzmax),ia(nnzmax),nnz_a
+      real a(nnzmax)
+      integer jb(nnzmax),ib(nnzmax),nnz_b
+      real b(nnzmax)
+      integer jc(nnzmax),ic(nnzmax),nnz_c
+      real c(nnzmax)
+      integer jL(nnzmax),iL(nnzmax)
+      real L(nnzmax)
       integer i_eye(nstate+1),j_eye(nstate),iw(nstate2)
-      real eye(nstate),op(nstate2,nstate2)
-      integer ii,jj,ierr,kk,iOp,handle
+      real eye(nstate)
+
+      integer ii,jj,ierr,kk,iOp,handle,nzmax
 !     And initialize Ltilde to zeros on the diagonal in CSR format
 !     So that we have a csr matrix to add to
+
       do ii=1,nstate2
          L(ii)     = 0.0
          iL(ii)    = ii
@@ -621,69 +726,248 @@ c     row i
          j_eye(ii) = ii
       enddo
       i_eye(nstate+1) = nstate+1
-      
+
 !     During setup, we previously stored the lindblad handles as:
 !     (x)_i = lin_mxm_op(1,i)
 !     (xt x)_i = lin_mxm_op(2,i)
 
-!     Loop over lindblad operators
+!     Loop over diagonal lindblad operators, adding them up
       do iOp=1,numberOfLinOps
-        handle = lin_mxm_op(2,iOp)
+         handle = lin_mxm_op(2,iOp)
+
 !     Do A = I cross at a
          call quantum_csr_kron(eye,j_eye,i_eye,nstate,nstate,
-     $       op_csr_a(1,handle),op_csr_ja(1,handle),
-     $       op_csr_ia(1,handle),nstate,nstate,a,ja,ia)
+     $        op_csr_a(1,handle),op_csr_ja(1,handle),
+     $        op_csr_ia(1,handle),
+     $        nstate,nstate,a,ja,ia,
+     $        nnzmax)
 
 !     Do B = at a cross I
-         call quantum_csr_kron(op_csr_a(1,handle),op_csr_ja(1,handle),
-     $        op_csr_ia(1,handle),nstate,nstate,
-     $        eye,j_eye,i_eye,nstate,nstate,b,jb,ib)
+         call quantum_csr_kron(op_csr_a(1,handle),
+     $        op_csr_ja(1,handle),op_csr_ia(1,handle),nstate,nstate,
+     $        eye,j_eye,i_eye,nstate,nstate,b,jb,ib,
+     $        nnzmax)
 
 !     Add a and b into c
          call aplb(nstate2,nstate2,1,a,ja,ia,b,jb,ib,c,jc,ic,
-     $        nstate2*nstate,iw,ierr)
+     $        nnzmax,iw,ierr)
 
-!     Add c and L_tilde, store in b (just tmp storage, sense aplb overwrites)
-         call aplb(nstate2,nstate2,1,c,jc,ic,L,jL,iL,b,jb,ib,
-     $        nstate2*nstate,iw,ierr)
+!     Multiply by the scalar
+         do ii=1,nstate2
+            do kk=ic(ii),ic(ii+1)-1
+               c(kk) = lin_mxm_a(iOp)*c(kk)
+            enddo
+         enddo
 
-!     Copy b to L_tilde
+         handle = lin_mxm_op(1,iOp)
+!     Now, do x cross x
+         call quantum_kron(handle,handle,b,jb,ib)
+c$$$         call quantum_csr_kron(op_csr_a(1,handle),op_csr_ja(1,handle),
+c$$$     $        op_csr_ia(1,handle),nstate,nstate,
+c$$$     $        op_csr_a(1,handle),op_csr_ja(1,handle),
+c$$$     $        op_csr_ia(1,handle),nstate,nstate,b,jb,ib,
+c$$$     $        nnzmax)
+
+!     multiply c = x cross x by -2
+         do ii=1,nstate2
+            do kk=ib(ii),ib(ii+1)-1
+               b(kk) = -2*lin_mxm_a(iOp)*b(kk)
+            enddo
+         enddo
+!     Add b and c to get this iOp's full matrix
+         call aplb(nstate2,nstate2,1,c,jc,ic,b,jb,ib,a,ja,ia,
+     $        nnzmax,iw,ierr)
+
+!     Now add A, this op's full matrix, to L
+         call aplb(nstate2,nstate2,1,a,ja,ia,L,jL,iL,b,jb,ib,
+     $        nnzmax,iw,ierr)
+
+!     Copy b to L_tilde and multiply by the scalar
          do ii=1,nstate2
             iL(ii) = ib(ii)
-            do kk=ib(ii),ib(ii+1)
+            do kk=ib(ii),ib(ii+1)-1
                jL(kk) = jb(kk)
                L(kk)  = b(kk)
             enddo
          enddo
          iL(nstate2+1) = ib(nstate2+1)
-         
+
+      enddo
+      
+c$$$      call csrdns(nstate2,nstate2,L,
+c$$$     $     jL,iL,op,nstate2,ierr)
+c$$$
+c$$$      do ii=1,nstate2
+c$$$         write(20,'(300g15.5)') (op(ii,jj), jj=1,nstate2)
+c$$$      enddo
+      
+
+!     Convert to COO format, in place
+!      call csrcoo(nstate2,1,nnzmax,L,jL,iL,nnz_c,L,iL,jL,ierr)
+
+!     Now write the coo matrix to file
+      if(nid.eq.0) then
+         open(unit=20,file='l_tilde')
+         nnz_b = 0
+         do ii=1,nstate2
+            do kk=iL(ii),iL(ii+1)-1
+               if(L(kk).ne.0.0) then
+                  nnz_b = nnz_b + 1
+               endif
+            enddo
+         enddo
+         write(20,*)nnz_b
+
+         do ii=1,nstate2
+            do kk=iL(ii),iL(ii+1)-1
+               if(L(kk).ne.0) then
+                  write(20,'(g35.15,2i14)')L(kk),jl(kk)-1,ii-1
+               endif
+            enddo
+         enddo
+
+c$$$         !count real nnz
+c$$$         nnz_b = 0
+c$$$         do ii=1,nnz_c
+c$$$            if(L(ii).ne.0.0) then
+c$$$               nnz_b = nnz_b + 1
+c$$$            endif
+c$$$         enddo
+c$$$         write(20,*)nnz_b
+c$$$         do ii=1,nnz_c
+c$$$            !We subtract 1 to count from 0 for C code
+c$$$            if(L(ii).ne.0.0) then
+c$$$               write(20,'(g35.15,2i14)') L(ii),jL(ii)-1,iL(ii)-1
+c$$$            endif
+c$$$         enddo
+c$$$         close(unit=20)
+      endif
+      
+      end
+
+      subroutine quantum_kron_lin2()
+      implicit none
+      include 'SIZE'
+      include 'QUANT'
+
+      integer ja(nnzmax),ia(nnzmax),nnz_a
+      real a(nnzmax)
+      integer jb(nnzmax),ib(nnzmax),nnz_b
+      real b(nnzmax)
+      integer jc(nnzmax),ic(nnzmax),nnz_c
+      real c(nnzmax)
+      integer jL(nnzmax),iL(nnzmax)
+      real L(nnzmax)
+      integer i_eye(nstate+1),j_eye(nstate),iw(nstate2)
+      real eye(nstate)
+      integer i_comb(nstate+1),j_comb(nstate2)
+      real comb(nstate2)
+      integer i_tmp(nstate+1),j_tmp(nstate2)
+      integer i_tmp2(nstate+1),j_tmp2(nstate2)
+      real tmp(nstate2),tmp2(nstate2)
+
+      integer ii,jj,ierr,kk,iOp,handle,nzmax
+!     And initialize Ltilde to zeros on the diagonal in CSR format
+!     So that we have a csr matrix to add to
+
+      do ii=1,nstate2
+         L(ii)     = 0.0
+         iL(ii)    = ii
+         jL(ii)    = ii
+      enddo
+      iL(nstate2+1)   = nstate2+1
+
+      do ii=1,nstate
+         eye(ii) = 1.0
+         i_eye(ii) = ii
+         j_eye(ii) = ii
+         comb(ii)  = 0.0
+         i_comb(ii) = ii
+         j_comb(ii) = ii
+      enddo
+      i_eye(nstate+1) = nstate+1
+      i_comb(nstate+1) = nstate+1
+!     During setup, we previously stored the lindblad handles as:
+!     (x)_i = lin_mxm_op(1,i)
+!     (xt x)_i = lin_mxm_op(2,i)
+
+!     Loop over diagonal lindblad operators, adding them up
+      do iOp=1,numberOfLinOps
+         handle = lin_mxm_op(2,iOp)
+!     Multiply by the scalar
+         do ii=1,nstate
+            i_tmp2(ii) = op_csr_ia(ii,handle)
+            do kk=op_csr_ia(ii,handle),op_csr_ia(ii+1,handle)-1
+               
+               tmp2(kk) = lin_mxm_a(iOp)*op_csr_a(kk,handle)
+            enddo
+         enddo
+         nzmax = nstate2
+         !!add (xt x)_i and comb, store in tmp
+         call quantum_add_csr (nstate,nstate,1,
+     $        tmp2,op_csr_ja(1,handle),
+     $        op_csr_ia(1,handle),comb,j_comb,i_comb,
+     $        tmp,j_tmp,i_tmp,nzmax)
+         !Copy tmp into comb
+         do ii=1,nstate
+            i_comb(ii) = i_tmp(ii)
+            do kk=i_tmp(ii),i_tmp(ii+1)-1
+               j_comb(kk) = j_tmp(kk)
+               comb(kk)  = tmp(kk)
+            enddo
+         enddo
+         i_comb(nstate+1) = i_tmp(nstate+1)
+      enddo
+
+!     Do A = I cross sum(at a)
+      call quantum_csr_kron(eye,j_eye,i_eye,nstate,nstate,
+     $     comb,j_comb,i_comb,
+     $     nstate,nstate,a,ja,ia,
+     $     nnzmax)
+
+!     Do B = sum(at a) cross I
+      call quantum_csr_kron(comb,j_comb,i_comb,
+     $     nstate,nstate,
+     $     eye,j_eye,i_eye,nstate,nstate,b,jb,ib,
+     $     nnzmax)
+!     Add a and b into c
+      call aplb(nstate2,nstate2,1,a,ja,ia,b,jb,ib,c,jc,ic,
+     $     nnzmax,iw,ierr)
+
+      do iOp=1,numberOfLinOps
          handle = lin_mxm_op(1,iOp)
 !     Now, do x cross x
+!         call quantum_kron(handle,handle,b,jb,ib)
          call quantum_csr_kron(op_csr_a(1,handle),op_csr_ja(1,handle),
      $        op_csr_ia(1,handle),nstate,nstate,
      $        op_csr_a(1,handle),op_csr_ja(1,handle),
-     $        op_csr_ia(1,handle),nstate,nstate,c,jc,ic)
+     $        op_csr_ia(1,handle),nstate,nstate,b,jb,ib,
+     $        nnzmax)
 
-!     Multiply c = x cross x by -2
+!     multiply b = x cross x by -2
          do ii=1,nstate2
-            do kk=ic(ii),ic(ii+1)
-               c(kk)  = -2*c(kk)
+            do kk=ib(ii),ib(ii+1)-1
+               b(kk) = -2*lin_mxm_a(iOp)*b(kk)
             enddo
          enddo
-         
-!     Add c and L_tilde 
-         call aplb(nstate2,nstate2,1,c,jc,ic,L,jL,iL,b,jb,ib,
-     $        nstate2*nstate,iw,ierr)
+!     Add b and c to get this iOp's full matrix
+         call aplb(nstate2,nstate2,1,c,jc,ic,b,jb,ib,a,ja,ia,
+     $        nnzmax,iw,ierr)
+
+!     Now add A, this op's full matrix, to L
+         call aplb(nstate2,nstate2,1,a,ja,ia,L,jL,iL,b,jb,ib,
+     $        nnzmax,iw,ierr)
         
 !     Copy b to L_tilde and multiply by the scalar
          do ii=1,nstate2
             iL(ii) = ib(ii)
-            do kk=ib(ii),ib(ii+1)
+            do kk=ib(ii),ib(ii+1)-1
                jL(kk) = jb(kk)
-               L(kk)  = lin_mxm_a(iOp)*b(kk)
+               L(kk)  = b(kk)
             enddo
          enddo
          iL(nstate2+1) = ib(nstate2+1)
+
       enddo
       
 c$$$      call csrdns(nstate2,nstate2,L,
@@ -696,7 +980,8 @@ c$$$      enddo
 
       
 !     Convert to COO format, in place
-      call csrcoo(nstate2,1,nstate2*nstate,L,jL,iL,nnz_c,L,iL,jL,ierr)
+      call csrcoo(nstate2,1,nnzmax,L,jL,iL,nnz_c,L,iL,jL,ierr)
+
 !     Now write the coo matrix to file
       if(nid.eq.0) then
          open(unit=20,file='l_tilde')
@@ -711,13 +996,15 @@ c$$$      enddo
          do ii=1,nnz_c
             !We subtract 1 to count from 0 for C code
             if(L(ii).ne.0.0) then
-               write(20,'(g35.15,2i9)') L(ii),jL(ii)-1,iL(ii)-1
+               write(20,'(g35.15,2i14)') L(ii),jL(ii)-1,iL(ii)-1
             endif
          enddo
          close(unit=20)
       endif
       
       end
+
+
 !************************************************************
 !     General tensor product of 2 CSR matrices
 !     C = kron(A,B)
@@ -729,15 +1016,18 @@ c$$$      enddo
 !            nnz_c     - nonzeros in C
 !************************************************************
       subroutine quantum_csr_kron(a,ja,ia,nrowa,ncola,b,jb,ib,
-     $     nrowb,ncolb,c,jc,ic)
+     $     nrowb,ncolb,c,jc,ic,nzmax)
 
       implicit none
-      integer ia(*),ja(*),ib(*),jb(*),ic(*),jc(*),iwk(nrowa*nrowb)
+      integer*8 nnz_c,nzmax
+      integer ia(nrowa+1),ja(nzmax),ib(nrowb+1),jb(nzmax)
+      integer ic(nzmax),jc(nzmax),iwk(nrowa*nrowb)
+      integer itmp(nzmax),jtmp(nzmax)
       integer nrowa,ncola,nrowb,ncolb
-      real    a(*),b(*),c(*)
-      integer ii,jj,ka,ll,mm,kb,nnz_c
+      real    a(nzmax),b(nzmax),c(nzmax),tmp(nzmax)
+      integer ii,jj,ka,ll,mm,kb,ierr
       real atmp
-      
+
       nnz_c = 0
 !Loop over the A matrix
       do ii=1,nrowa
@@ -754,19 +1044,19 @@ c$$$      enddo
 !     The location in C is:
 !                 nrowb*(ii-1)+1+(ll-1) , ncolb*(jj-1)+1+(mm-1)
                   nnz_c = nnz_c + 1
-                  c(nnz_c) = atmp * b(kb)
-                  ic(nnz_c) = nrowb*(ii-1) + ll
-                  jc(nnz_c) = ncolb*(jj-1) +  mm
+                  tmp(nnz_c) = atmp * b(kb)
+                  itmp(nnz_c) = nrowb*(ii-1) + ll
+                  jtmp(nnz_c) = ncolb*(jj-1) + mm
                enddo
             enddo
          enddo
       enddo
 
-!Convert to CSR matrix
-      call coicsr(nrowa*nrowb,nnz_c,1,c,jc,ic,iwk)
+!     Convert to CSR matrix
+
+      call coocsr(nrowa*nrowb,nnz_c,tmp,itmp,jtmp,c,jc,ic)
 
       
-
       end
 
       
@@ -1063,6 +1353,7 @@ c         (according to the value of  nzmax).
 c
       double precision a(*),ao(*)
       integer ir(*),jc(*),ja(*),ia(*)
+      integer*8 nrow,nzmax,nnz
 
       ierr = 0
       nnz = ia(nrow+1)-1

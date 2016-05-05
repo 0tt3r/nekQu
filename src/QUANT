@@ -20,6 +20,8 @@
        Common /QPRAMSS/ max_iter
        integer max_iter
 
+       Common /QPRAMMAX/ nnzmax
+       integer*8        nnzmax
 c!!! Temporary: level = nzmax, lnumqd=lin_max_ops lnumsp=maxOps
 
 c!!! These are recreating the common blocks from nekCEM
@@ -44,31 +46,48 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , pulse_omega_0, pulse_t_0,energy0_pls
      $               , pulse_duration,Emax,Emin
 
+
+c$$$     ! $               , lin_l_index(2,maxN*maxN/lp,maxOp/2)
+c$$$     ! $               , lin_nl_index(2,maxN,maxN/lp,maxOp/2)
+c$$$     ! $               , lin_target(maxN,maxOp/2)
+c$$$     ! $               , lin_l_length(maxOp/2),lin_nl_col_length(maxOp/2)
+c$$$     ! $               , lin_nl_length(maxN,maxOp/2),lin_tiling_N(maxOp/2)
+c$$$     $               , quantum_gate_coo_ia(2*maxN)
+c$$$     $               , quantum_gate_coo_ja(2*maxN)
+c$$$     $               , quantum_gate_csr_ia(2*maxN,maxOp)
+c$$$     $               , quantum_gate_csr_ja(2*maxN,maxOp)
+c$$$     $               , quantum_gate(maxTimeSteps),gates_table(6,maxOp) !6 is because there are 6 basi
+c$$$     $               , cnot_table(maxOp,maxOp)
+c$$$     $               , crk_table(maxOp,maxOp,maxOp),first_handle(maxOp)
+c$$$     $               , obs_csr_ia(maxN*maxN/lp+1,maxOp)
+c$$$     $               , obs_csr_ja(maxN*maxN/lp,maxOp)
+
+
        common /QPRAMIV/ iwork(5),ham_ia(maxN+1)
-     $               , ham_ja(maxN*maxN/lp)
+     $               , ham_ja(maxN*maxN/15)
      $               , state(maxOp,maxN),initIndex(maxOp,2),oldN(maxOp)
      $               , levels(maxOp),maxLevels(maxOp),obs_handle(maxOp)
-     $               , lin_offset(maxOp/2),lin_mxm_op(2,maxOp/2)
-     $               , lin_l_index(2,maxN*maxN/lp,maxOp/2)
-     $               , lin_nl_index(2,maxN,maxN/lp,maxOp/2)
-     $               , lin_target(maxN,maxOp/2)
-     $               , lin_l_length(maxOp/2),lin_nl_col_length(maxOp/2)
-     $               , lin_nl_length(maxN,maxOp/2),lin_tiling_N(maxOp/2)
+     $               , lin_offset(1),lin_mxm_op(2,maxOp)
+     $               , lin_l_index(2,1,1)
+     $               , lin_nl_index(2,1,1,1)
+     $               , lin_target(1,1)
+     $               , lin_l_length(1),lin_nl_col_length(1)
+     $               , lin_nl_length(1,1),lin_tiling_N(1)
      $               , op_csr_ia(maxN+1,maxOp),ham_i_ia(maxN+1)
-     $               , ham_i_ja(maxN*maxN/lp),ham_d_ja(maxN*maxN/lp)
-     $               , op_csr_ja(maxN*maxN/lp,maxOp),ham_d_ia(maxN+1)
-     $               , j0_array(maxN*maxN/lp)
-     $               , obs_csr_ia(maxN*maxN/lp+1,maxOp)
-     $               , obs_csr_ja(maxN*maxN/lp,maxOp)
+     $               , ham_i_ja(maxN*maxN/15),ham_d_ja(maxN*maxN/5)
+     $               , op_csr_ja(maxN*maxN/15,maxOp),ham_d_ia(maxN+1)
+     $               , j0_array(maxN*maxN/15)
+     $               , obs_csr_ia(1,1)
+     $               , obs_csr_ja(1,1)
      $               , vec_state(maxOp), vec_to_op(maxOp)
      $               , vec_state2(maxOp),handle_to_op(maxOp)
-     $               , quantum_gate_coo_ia(2*maxN)
-     $               , quantum_gate_coo_ja(2*maxN)
-     $               , quantum_gate_csr_ia(2*maxN,maxOp)
-     $               , quantum_gate_csr_ja(2*maxN,maxOp)
-     $               , quantum_gate(maxTimeSteps),gates_table(6,maxOp) !6 is because there are 6 basic quantum gates
-     $               , cnot_table(maxOp,maxOp)
-     $               , crk_table(maxOp,maxOp,maxOp),first_handle(maxOp)
+     $               , quantum_gate_coo_ia(1)
+     $               , quantum_gate_coo_ja(1)
+     $               , quantum_gate_csr_ia(1,1)
+     $               , quantum_gate_csr_ja(1,1)
+     $               , quantum_gate(maxTimeSteps),gates_table(1,1) !6 is because there are 6 basic quantum gates
+     $               , cnot_table(1,1)
+     $               , crk_table(1,1,1),first_handle(maxOp)
 
        integer         iwork,ham_ia,ham_ja
      $               , oldN,state
@@ -94,27 +113,31 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
 
        common /QPRAMI8/ lin_disp(maxN,maxOp)
        integer*8        lin_disp
-       common /QPRAMIE/ glo_num_q_concV(maxN*maxN/lp) 
-     $               , glo_num_q_Hv(maxN*maxN/lp)
+       common /QPRAMIE/ glo_num_q_concV(maxN*maxN/15) 
+     $               , glo_num_q_Hv(maxN*maxN/15)
        integer*8       glo_num_q_Hv,glo_num_q_concV !FIXME 12-17-14 Matt Otten: integer*8 does not work on blues
-
-       common /QPRAMV/ work(maxN + 21*2*maxN*maxN/lp)
-     $               , work_ode(100+21*maxN*maxN/lp)     
-     $               , ham_i(maxN*maxN/lp),ham_d(maxN*maxN/lp)
-     $               , ham_a(maxN*maxN/lp),omega_quant(maxE)
-     $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/lp,maxOp/2)
-     $               , lin_nl_a(maxN,maxN/lp,maxOp/2),lin_mxm_a(maxOp/2)
-     $               , op_csr_a(maxN*maxN/lp,maxOp) !I'm assuming that there is no more than 10 diagonals in on operator
-     $               , tmprv(maxN*maxN/lp)
-     $               , tmpiv(maxN*maxN/lp)
+c$$$      $               , lin_nl_a(maxN,maxN/15,maxOp/2),lin_mxm_a(maxOp)
+c$$$     $               , observable(maxOp),obs_csr_a(maxN*maxN/15,maxOp)
+       common /QPRAMV/ work(maxN + 21*2*maxN*maxN/15)
+     $               , work_ode(50+21*maxN*maxN/15)     
+     $               , ham_i(maxN*maxN/15),ham_d(maxN*maxN/15)
+     $               , ham_a(maxN*maxN/15),omega_quant(maxE)
+     $               , obs_scalar(maxOp),lin_l_a(maxN*maxN/15,maxOp/2)
+     $               , lin_nl_a(1,1,1),lin_mxm_a(maxOp)
+     $               , op_csr_a(maxN*maxN/15,maxOp) !I'm assuming that there is no more than 5 diagonals in on operator
+     $               , tmprv(maxN*maxN/15)
+     $               , tmpiv(maxN*maxN/15)
      $               , pop_time(maxTimeSteps,maxOp/3)
      $               , obs_time(maxTimeSteps,maxOp/4)
-     $               , observable(maxOp),obs_csr_a(maxN*maxN/lp,maxOp/4)
+     $               , observable(maxOp),obs_csr_a(1,1)
      $               , quantum_gate_times(maxTimeSteps)
-     $               , r_cg(2*maxN*maxN/lp),p_cg(2*maxN*maxN/lp)
-     $               , x_cg(2*maxN*maxN/lp),Ap_cg(2*maxN*maxN/lp)
-     $               , w_gm(2*maxN*maxN/lp)
-     
+     $               , r_cg(1),p_cg(1)
+     $               , x_cg(1),Ap_cg(1)
+     $               , w_gm(1)
+c$$$     $               , r_cg(2*maxN*maxN/15),p_cg(2*maxN*maxN/15)
+c$$$     $               , x_cg(2*maxN*maxN/15),Ap_cg(2*maxN*maxN/15)
+c$$$     $               , w_gm(2*maxN*maxN/15)
+
 
 
        real            work,work_ode,ham_i,ham_d,ham_a,lin_mxm_a
@@ -124,32 +147,53 @@ C     NOTE: NID is stored in 'SIZE' for greater accessibility
      $               , quantum_gate_times
      $               , r_cg,p_cg,x_cg,Ap_cg,w_gm
 
-       common /QPRAMC/ rho      (maxN,maxN/lp)
-     $               , drho     (maxN,maxN/lp)
-     $               , tmp_c1(maxN,maxN/lp)
+       common /QPRAMC/ rho      (1,1)
+     $               , drho     (1,1)
+     $               , tmp_c1(1,1)
      $               , en_t(maxE)
-     $               , obs_freq(maxOp,maxE)
-     $               , quantum_gate_coo_a(2*maxN)
-     $               , quantum_gate_csr_a(2*maxN,maxOp)
+     $               , obs_freq(1,1)
+     $               , quantum_gate_coo_a(1)
+     $               , quantum_gate_csr_a(1,1)
 
        complex        rho,drho,tmp_c1,en_t,obs_freq
      $               , quantum_gate_coo_a,quantum_gate_csr_a
 
-       common /QPRAMW/ rho_r       (maxN,maxN/lp)
-     $               , rho_i       (maxN,maxN/lp)
-     $               , k_rho_r     (maxN,maxN/lp)
-     $               , k_rho_i     (maxN,maxN/lp)
-     $               , resrho_r    (maxN,maxN/lp)
-     $               , resrho_i    (maxN,maxN/lp)
-     $               , tmp_r1      (maxN,maxN/lp)
-     $               , tmp_r2      (maxN,maxN/lp)
-     $               , tmp_i1      (maxN,maxN/lp)
-     $               , tmp_i2      (maxN,maxN/lp)
-     $               , lin_comb_op (maxN,maxN/lp)
-     $               , state_sums(maxN,maxN/lp)
+
+c$$$       common /QPRAMC/ rho      (maxN,maxN/15)
+c$$$     $               , drho     (maxN,maxN/15)
+c$$$     $               , tmp_c1(maxN,maxN/15)
+c$$$     $               , en_t(maxE)
+c$$$     $               , obs_freq(maxOp,maxE)
+c$$$     $               , quantum_gate_coo_a(2*maxN)
+c$$$     $               , quantum_gate_csr_a(2*maxN,maxOp)
+
+       common /QPRAMW/ rho_r       (1,1)
+     $               , rho_i       (1,1)
+     $               , k_rho_r     (1,1)
+     $               , k_rho_i     (1,1)
+     $               , resrho_r    (1,1)
+     $               , resrho_i    (1,1)
+     $               , tmp_r1      (1,1)
+     $               , tmp_r2      (1,1)
+     $               , tmp_i1      (1,1)
+     $               , tmp_i2      (1,1)
+     $               , lin_comb_op (1,1)
+     $               , state_sums(maxN,maxN/15)
        real            rho_r,rho_i,k_rho_r,k_rho_i,resrho_r,resrho_i
        real            tmp_r1,tmp_r2,tmp_i1,tmp_i2,operator,lin_comb_op
        real            ham_dep,ham_indep,lin_one_op,state_sums
+
+c$$$       common /QPRAMW/ rho_r       (maxN,maxN/15)
+c$$$     $               , rho_i       (maxN,maxN/15)
+c$$$     $               , k_rho_r     (maxN,maxN/15)
+c$$$     $               , k_rho_i     (maxN,maxN/15)
+c$$$     $               , resrho_r    (maxN,maxN/15)
+c$$$     $               , resrho_i    (maxN,maxN/15)
+c$$$     $               , tmp_r1      (maxN,maxN/15)
+c$$$     $               , tmp_r2      (maxN,maxN/15)
+c$$$     $               , tmp_i1      (maxN,maxN/15)
+c$$$     $               , tmp_i2      (maxN,maxN/15)
+c$$$     $               , lin_comb_op (maxN,maxN/15)
 
 
 

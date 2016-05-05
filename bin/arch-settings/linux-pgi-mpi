@@ -29,8 +29,8 @@ export P="-r8"
 
 export EXTRALIBS=""
 export LAPACK="-llapack -lblas "
-export LD="mpif77 -pg -mcmodel=medium "
-OPT_FULL="-O3"
+export LD="mpif77 -pg -mcmodel=medium"
+OPT_FULL="-g -Mbounds"
 OPT_DEBUG="-g -O0 "
 
 export HPMFLAGS=""

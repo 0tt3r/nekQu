@@ -51,7 +51,6 @@ c$$$      rho_r(3,3) = 0.5
 c$$$      rho_r(2,3) = -0.5
 c$$$      rho_r(3,2) = -0.5
 
-      if(nid.eq.0) rho_r(3,3) = 1
 !FIXME: Move density matrix initialization to user routine!
       if(levels(2).eq.2) then
       do ii=1,nstate_np
