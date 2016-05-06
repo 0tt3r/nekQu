@@ -1027,7 +1027,7 @@ c$$$      enddo
       real    a(nzmax),b(nzmax),c(nzmax),tmp(nzmax)
       integer ii,jj,ka,ll,mm,kb,ierr
       real atmp
-
+      
       nnz_c = 0
 !Loop over the A matrix
       do ii=1,nrowa

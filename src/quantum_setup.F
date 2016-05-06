@@ -813,6 +813,7 @@ c$$$      end
       iOp = numberOfLinOps
 
       !Store things for the explicit mxm lindblad
+
       lin_mxm_op(1,iOp) = handle1
       lin_mxm_op(2,iOp) = handle2
       lin_mxm_a(iOp)    = scalar

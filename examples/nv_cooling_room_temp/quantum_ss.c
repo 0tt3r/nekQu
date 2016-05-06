@@ -86,7 +86,7 @@ int main(int argc,char **args)
      determined by PETSc at runtime.
   */
   ierr = MatCreateAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim,
-                      4500,NULL,4500,NULL,&A);CHKERRQ(ierr);
+                      5000,NULL,5000,NULL,&A);CHKERRQ(ierr);
   /* ierr = MatCreateSeqAIJ(PETSC_COMM_WORLD,PETSC_DECIDE,PETSC_DECIDE,dim,dim, */
   /*                     1000,NULL,100,NULL,&A);CHKERRQ(ierr); */
   //  ierr = MatSetSizes(A,PETSC_DECIDE,PETSC_DECIDE,dim,dim);CHKERRQ(ierr);
@@ -125,13 +125,13 @@ int main(int argc,char **args)
     loop through ham; if I own the row, then add it to the matrix
    */
   
-  /* for (i=0;i<lin_nnz;i++){ */
-  /*   if(lin_row[i]<Iend&&lin_row[i]>=Istart) { */
-  /*     mat_tmp = lin[i] + 0.*PETSC_i; */
-  /*     ierr = MatSetValues(A,1,&lin_row[i],1,&lin_col[i],&mat_tmp,ADD_VALUES);CHKERRQ(ierr); */
-  /*   } */
-  /* } */
-      ierr = MatSetValues(A,lin_nnz,lin_row,lin_nnz,lin_col,lin,ADD_VALUES);CHKERRQ(ierr);
+  for (i=0;i<lin_nnz;i++){
+    if(lin_row[i]<Iend&&lin_row[i]>=Istart) {
+      mat_tmp = lin[i] + 0.*PETSC_i;
+      ierr = MatSetValues(A,1,&lin_row[i],1,&lin_col[i],&mat_tmp,ADD_VALUES);CHKERRQ(ierr);
+    }
+  }
+  //      ierr = MatSetValues(A,lin_nnz,lin_row,lin_nnz,lin_col,lin,ADD_VALUES);CHKERRQ(ierr);
 
   if(nid==0) printf("set lin\n");
   /*
